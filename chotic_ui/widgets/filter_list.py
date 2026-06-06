@@ -104,7 +104,7 @@ class FilterList:
 
     def _render(self, matches):
         w = self._width()
-        c = Colors.HOTKEY
+        c = Colors.PRIMARY
         inner = w - 4
         lines = []
 
@@ -122,7 +122,7 @@ class FilterList:
 
         # Query line
         count = f"{Colors.MUTED}{len(matches)} match{'es' if len(matches) != 1 else ''}{Colors.RESET}"
-        query_disp = f"{Colors.HOTKEY}{self.prompt}:{Colors.RESET} {self._query}{Colors.HOTKEY}▌{Colors.RESET}"
+        query_disp = f"{Colors.PRIMARY}{self.prompt}:{Colors.RESET} {self._query}{Colors.PRIMARY}▌{Colors.RESET}"
         gap = inner - _vis(query_disp) - _vis(count)
         row(f"{query_disp}{' ' * max(1, gap)}{count}")
         lines.append(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
@@ -140,15 +140,15 @@ class FilterList:
                 if value is self.SECTION:
                     row(f"{Colors.DIM}{label}{Colors.RESET}")
                 elif i == self._cursor:
-                    row(f"{Colors.HOTKEY}▸ {Colors.RESET}{label}")
+                    row(f"{Colors.PRIMARY}▸ {Colors.RESET}{label}")
                 else:
                     row(f"  {label}")
             if end < len(matches):
                 row(f"{Colors.MUTED}  ▼ {len(matches) - end} below{Colors.RESET}")
 
         lines.append(box_row(BOX_BL, BOX_H, BOX_BR, w, c))
-        hint = (f"  {Colors.MUTED}↑/↓ Navigate  {Colors.HOTKEY}Enter{Colors.MUTED} Select  "
-                f"{Colors.HOTKEY}⌫{Colors.MUTED} Delete  {Colors.HOTKEY}Esc{Colors.MUTED} {self.esc_label}  "
+        hint = (f"  {Colors.MUTED}↑/↓ Navigate  {Colors.PRIMARY}Enter{Colors.MUTED} Select  "
+                f"{Colors.PRIMARY}⌫{Colors.MUTED} Delete  {Colors.PRIMARY}Esc{Colors.MUTED} {self.esc_label}  "
                 f"{Colors.DIM}(type to filter){Colors.RESET}")
         lines.append(hint)
 

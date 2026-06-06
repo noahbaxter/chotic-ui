@@ -50,6 +50,7 @@ from .colors import (
     get_gradient_color,
     get_theme_name,
     cycle_theme,
+    set_theme,
     THEME_SWITCHER_ENABLED,
 )
 
@@ -98,4 +99,5 @@ __all__ = [
     "get_gradient_color",
     "get_theme_name",
     "cycle_theme",
+    "set_theme",
 ]

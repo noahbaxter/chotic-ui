@@ -26,6 +26,7 @@ from .primitives import (
     KEY_BACKSPACE,
     Colors,
     rgb,
+    set_theme,
 )
 from .components import (
     configure_header,
@@ -66,6 +67,7 @@ __all__ = [
     "KEY_BACKSPACE",
     "Colors",
     "rgb",
+    "set_theme",
     "configure_header",
     "print_header",
     "invalidate_header_cache",

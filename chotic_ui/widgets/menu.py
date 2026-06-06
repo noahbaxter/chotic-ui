@@ -170,6 +170,7 @@ class Menu:
     update_callback: callable = None  # Called periodically; return True to re-render
     refresh_interval_ms: int = 200  # How often to check for updates
     _last_callback_time: float = 0.0
+    rebuild: callable = None  # Repopulates items with fresh colors (called on theme switch)
 
     def add_item(self, item):
         self.items.append(item)
@@ -359,9 +360,9 @@ class Menu:
             if not item.expanded and item.drive_count > 0:
                 count_str = f" {Colors.MUTED}({item.enabled_count}/{item.drive_count} drives){Colors.RESET}"
             if selected:
-                content = f"{Colors.PINK}▸{Colors.RESET} {Colors.MUTED}{indicator}{Colors.RESET} {Colors.HOTKEY}[{label_upper}]{Colors.RESET}{count_str}"
+                content = f"{Colors.SELECTION}▸{Colors.RESET} {Colors.MUTED}{indicator}{Colors.RESET} {Colors.PRIMARY}[{label_upper}]{Colors.RESET}{count_str}"
             else:
-                content = f"  {Colors.MUTED}{indicator}{Colors.RESET} {Colors.HOTKEY}[{label_upper}]{Colors.RESET}{count_str}"
+                content = f"  {Colors.MUTED}{indicator}{Colors.RESET} {Colors.PRIMARY}[{label_upper}]{Colors.RESET}{count_str}"
             visible = len(strip_ansi(content))
             pad = w - 4 - visible
             print(f"{c}{BOX_V}{Colors.RESET} {content}{' ' * pad} {c}{BOX_V}{Colors.RESET}")
@@ -371,7 +372,7 @@ class Menu:
             show_toggle = getattr(item, 'show_toggle', None)
 
             if show_toggle is not None:
-                toggle_prefix = f"{Colors.HOTKEY}[ON]{Colors.RESET}  " if show_toggle else f"{Colors.DIM}[OFF]{Colors.RESET} "
+                toggle_prefix = f"{Colors.PRIMARY}[ON]{Colors.RESET}  " if show_toggle else f"{Colors.DIM}[OFF]{Colors.RESET} "
                 toggle_len = 6
             else:
                 toggle_prefix = ""
@@ -385,12 +386,12 @@ class Menu:
             if item.hotkey:
                 key_offset = (len(item.hotkey) - 1) // 2
                 unsel_w = max(0, 1 - key_offset)
-                sel_pfx = f"{Colors.PINK}▸{Colors.RESET}"
+                sel_pfx = f"{Colors.SELECTION}▸{Colors.RESET}"
                 unsel_pfx = " " * unsel_w
                 pfx_width = 1 if selected else unsel_w
                 hotkey_pad = " " * max(0, 5 - pfx_width - len(item.hotkey) - 2)
             else:
-                sel_pfx = f"{Colors.PINK}▸{Colors.RESET} "
+                sel_pfx = f"{Colors.SELECTION}▸{Colors.RESET} "
                 unsel_pfx = "  "
                 pfx_width = 2
                 hotkey_pad = ""
@@ -414,7 +415,7 @@ class Menu:
                     hotkey = f"{Colors.DIM}[{item.hotkey}]{Colors.RESET}{hotkey_pad}" if item.hotkey else ""
                     left = f"{unsel_pfx}{toggle_prefix}{hotkey}{Colors.DIM}{label_text}{Colors.RESET}"
             else:
-                hotkey = f"{Colors.HOTKEY}[{item.hotkey}]{Colors.RESET}{hotkey_pad}" if item.hotkey else ""
+                hotkey = f"{Colors.PRIMARY}[{item.hotkey}]{Colors.RESET}{hotkey_pad}" if item.hotkey else ""
                 if selected:
                     left = f"{sel_pfx}{toggle_prefix}{hotkey}{Colors.BOLD}{label_text}{Colors.RESET}"
                 else:
@@ -458,7 +459,7 @@ class Menu:
             print_header()
 
             w = self._width()
-            c = Colors.INDIGO
+            c = Colors.BORDER
 
             scrollable, pinned = self._split_items()
             self._adjust_scroll()
@@ -525,21 +526,21 @@ class Menu:
             print(box_row(BOX_BL, BOX_H, BOX_BR, w, c))
 
             # Hint
-            hint = f"  {Colors.MUTED}↑/↓ Navigate  {Colors.HOTKEY}Enter{Colors.MUTED} Select"
+            hint = f"  {Colors.MUTED}↑/↓ Navigate  {Colors.PRIMARY}Enter{Colors.MUTED} Select"
             if self.space_hint:
-                hint += f"  {Colors.HOTKEY}Space{Colors.MUTED} {self.space_hint}"
+                hint += f"  {Colors.PRIMARY}Space{Colors.MUTED} {self.space_hint}"
             if self.filterable and not self._filter_mode:
-                hint += f"  {Colors.HOTKEY}/{Colors.MUTED} Filter"
+                hint += f"  {Colors.PRIMARY}/{Colors.MUTED} Filter"
             if THEME_SWITCHER_ENABLED and not self._filter_mode:
-                hint += f"  {Colors.HOTKEY}C{Colors.MUTED} Theme"
+                hint += f"  {Colors.PRIMARY}T{Colors.MUTED} Theme"
             esc_label = "Exit filter" if (self.filterable and self._filter_mode) else self.esc_label
-            hint += f"  {Colors.HOTKEY}Esc{Colors.MUTED} {esc_label}{Colors.RESET}"
+            hint += f"  {Colors.PRIMARY}Esc{Colors.MUTED} {esc_label}{Colors.RESET}"
             print(hint)
 
             # Filter line (only while in filter mode)
             if self.filterable and self._filter_mode:
-                print(f"  {Colors.HOTKEY}{self.filter_prompt}:{Colors.RESET} "
-                      f"{self._filter}{Colors.HOTKEY}▌{Colors.RESET}  "
+                print(f"  {Colors.PRIMARY}{self.filter_prompt}:{Colors.RESET} "
+                      f"{self._filter}{Colors.PRIMARY}▌{Colors.RESET}  "
                       f"{Colors.DIM}(⌫ clear, Esc exit){Colors.RESET}")
 
             # Status line (scan progress, etc.)
@@ -735,9 +736,19 @@ class Menu:
                     self._filter_mode = True
                     self._render()
 
-                elif THEME_SWITCHER_ENABLED and isinstance(key, str) and len(key) == 1 and key.upper() == 'C':
+                elif THEME_SWITCHER_ENABLED and isinstance(key, str) and len(key) == 1 and key.upper() == 'T':
                     cycle_theme()
                     invalidate_header_cache()
+                    if self.rebuild:
+                        # Item labels bake in color escapes at build time, so
+                        # rebuild them to pick up the new theme's accents.
+                        self.rebuild(self)
+                        if self.filterable:
+                            self._all_items = list(self.items)
+                        selectable = self._selectable()
+                        if self._selected not in selectable:
+                            self._selected = selectable[0] if selectable else 0
+                        self._adjust_scroll()
                     self._render()
 
                 elif isinstance(key, str) and len(key) == 1:
