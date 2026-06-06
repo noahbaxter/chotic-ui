@@ -60,8 +60,9 @@ class FilterList:
     SECTION = object()  # sentinel value marking a section-header row
 
     def __init__(self, items, *, title="", subtitle="", esc_label="Back",
-                 prompt="Filter", page_size=15, search_key=None):
+                 prompt="Filter", page_size=None, search_key=None):
         # items: list of (label, value). label may contain ANSI.
+        # page_size None => size to the terminal height (avoids scrolling by 1).
         self.items = list(items)
         self.title = title
         self.subtitle = subtitle
@@ -93,6 +94,14 @@ class FilterList:
     def _width(self):
         return max(40, min(get_terminal_width() - 2, 100))
 
+    def _page(self):
+        """Visible row capacity: fixed if the caller set page_size, else derived
+        from terminal height (header + box chrome + hint ~= 16 lines)."""
+        if self.page_size is not None:
+            return self.page_size
+        rows = shutil.get_terminal_size((80, 24)).lines
+        return max(6, rows - 16)
+
     def _render(self, matches):
         w = self._width()
         c = Colors.HOTKEY
@@ -123,7 +132,7 @@ class FilterList:
             row(f"{Colors.MUTED}(no matches){Colors.RESET}")
         else:
             start = self._scroll
-            end = min(len(matches), start + self.page_size)
+            end = min(len(matches), start + self._page())
             if start > 0:
                 row(f"{Colors.MUTED}  ▲ {start} above{Colors.RESET}")
             for i in range(start, end):
@@ -154,9 +163,9 @@ class FilterList:
     def _clamp_scroll(self, matches):
         if self._cursor < self._scroll:
             self._scroll = self._cursor
-        elif self._cursor >= self._scroll + self.page_size:
-            self._scroll = self._cursor - self.page_size + 1
-        self._scroll = max(0, min(self._scroll, max(0, len(matches) - self.page_size)))
+        elif self._cursor >= self._scroll + self._page():
+            self._scroll = self._cursor - self._page() + 1
+        self._scroll = max(0, min(self._scroll, max(0, len(matches) - self._page())))
 
     def run(self):
         """Show the list. Returns the chosen value, or None if cancelled."""
