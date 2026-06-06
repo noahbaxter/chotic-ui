@@ -704,6 +704,9 @@ class Menu:
                         action = "enter" if key == KEY_ENTER else "space"
                         return MenuResult(item, action)
 
+                elif key == KEY_TAB:
+                    return MenuResult(self.items[self._selected], "tab")
+
                 elif key == KEY_LEFT or key == KEY_RIGHT:
                     current_item = self.items[self._selected]
                     if isinstance(current_item, MenuGroupHeader):
