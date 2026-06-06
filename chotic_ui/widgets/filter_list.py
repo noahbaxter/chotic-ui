@@ -51,7 +51,13 @@ def _truncate_ansi(text: str, max_visible: int) -> str:
 
 
 class FilterList:
-    """A real-time filterable, scrollable picker."""
+    """A real-time filterable, scrollable picker.
+
+    Items are (label, value) pairs. Use `(label, FilterList.SECTION)` for a
+    non-selectable section header; the cursor skips it and it's hidden while
+    filtering."""
+
+    SECTION = object()  # sentinel value marking a section-header row
 
     def __init__(self, items, *, title="", subtitle="", esc_label="Back",
                  prompt="Filter", page_size=15, search_key=None):
@@ -74,10 +80,15 @@ class FilterList:
         terms = q.split()
         out = []
         for label, value in self.items:
+            if value is self.SECTION:
+                continue  # headers hidden while filtering (flat results)
             hay = self._search_key(label, value).lower()
             if all(t in hay for t in terms):
                 out.append((label, value))
         return out
+
+    def _selectable(self, matches):
+        return [i for i, (_, v) in enumerate(matches) if v is not self.SECTION]
 
     def _width(self):
         return max(40, min(get_terminal_width() - 2, 100))
@@ -116,8 +127,10 @@ class FilterList:
             if start > 0:
                 row(f"{Colors.MUTED}  ▲ {start} above{Colors.RESET}")
             for i in range(start, end):
-                label, _ = matches[i]
-                if i == self._cursor:
+                label, value = matches[i]
+                if value is self.SECTION:
+                    row(f"{Colors.DIM}{label}{Colors.RESET}")
+                elif i == self._cursor:
                     row(f"{Colors.HOTKEY}▸ {Colors.RESET}{label}")
                 else:
                     row(f"  {label}")
@@ -150,8 +163,12 @@ class FilterList:
         with cbreak_noecho():
             while True:
                 matches = self._matches()
-                if self._cursor >= len(matches):
-                    self._cursor = max(0, len(matches) - 1)
+                sel = self._selectable(matches)
+                # Keep the cursor on a selectable (non-header) row.
+                if not sel:
+                    self._cursor = 0
+                elif self._cursor not in sel:
+                    self._cursor = min(sel, key=lambda i: abs(i - self._cursor))
                 self._clamp_scroll(matches)
                 self._render(matches)
 
@@ -159,13 +176,15 @@ class FilterList:
                 if key == KEY_ESC:
                     return None
                 if key == KEY_ENTER:
-                    if matches:
+                    if sel and matches[self._cursor][1] is not self.SECTION:
                         return matches[self._cursor][1]
                     continue
                 if key == KEY_UP:
-                    self._cursor = max(0, self._cursor - 1)
+                    above = [i for i in sel if i < self._cursor]
+                    self._cursor = above[-1] if above else self._cursor
                 elif key == KEY_DOWN:
-                    self._cursor = min(max(0, len(matches) - 1), self._cursor + 1)
+                    below = [i for i in sel if i > self._cursor]
+                    self._cursor = below[0] if below else self._cursor
                 elif key == KEY_BACKSPACE:
                     self._query = self._query[:-1]
                     self._cursor = 0
