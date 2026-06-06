@@ -29,6 +29,7 @@ from ..primitives import (
     KEY_ESC,
     KEY_SPACE,
     KEY_TAB,
+    KEY_BACKSPACE,
 )
 from ..components import (
     box_row,
@@ -159,6 +160,9 @@ class Menu:
     items: list = field(default_factory=list)
     column_header: str = ""  # Right-aligned header row rendered after title divider
     status_line: str = ""  # Rendered below menu box (for scan progress, etc.)
+    filterable: bool = False  # Opt-in: type to filter items live (letters/digits)
+    filter_prompt: str = "Filter"
+    _filter: str = ""
     _selected: int = 0
     _selected_before_hotkey: int = 0
     _scroll_offset: int = 0
@@ -193,6 +197,26 @@ class Menu:
                 item.locked = False
                 return True
         return False
+
+    def _apply_filter(self):
+        """Rebuild self.items from the snapshot to match the live filter. Pinned
+        items always stay; while filtering, dividers/group headers are dropped for
+        a flat match view. Only used when `filterable` is True."""
+        snapshot = getattr(self, "_all_items", self.items)
+        query = self._filter.lower().strip()
+        if not query:
+            self.items = list(snapshot)
+            return
+        terms = query.split()
+        kept = []
+        for it in snapshot:
+            if getattr(it, "pinned", False):
+                kept.append(it)
+            elif isinstance(it, (MenuItem, MenuAction)):
+                text = strip_ansi(it.label).lower()
+                if all(t in text for t in terms):
+                    kept.append(it)
+        self.items = kept
 
     def _split_items(self) -> tuple[list[tuple[int, Any]], list[tuple[int, Any]]]:
         """Split items into scrollable and pinned lists, preserving original indices."""
@@ -503,10 +527,16 @@ class Menu:
             hint = f"  {Colors.MUTED}↑/↓ Navigate  {Colors.HOTKEY}Enter{Colors.MUTED} Select"
             if self.space_hint:
                 hint += f"  {Colors.HOTKEY}Space{Colors.MUTED} {self.space_hint}"
-            if THEME_SWITCHER_ENABLED:
+            if THEME_SWITCHER_ENABLED and not self.filterable:
                 hint += f"  {Colors.HOTKEY}C{Colors.MUTED} Theme"
             hint += f"  {Colors.HOTKEY}Esc{Colors.MUTED} {self.esc_label}{Colors.RESET}"
             print(hint)
+
+            # Filter line (type-to-filter menus)
+            if self.filterable:
+                print(f"  {Colors.HOTKEY}{self.filter_prompt}:{Colors.RESET} "
+                      f"{self._filter}{Colors.HOTKEY}▌{Colors.RESET}  "
+                      f"{Colors.DIM}(type to filter, ⌫ clear){Colors.RESET}")
 
             # Status line (scan progress, etc.)
             if self.status_line:
@@ -563,6 +593,9 @@ class Menu:
 
     def run(self, initial_index: int = 0) -> MenuResult | None:
         """Run menu, returns MenuResult or None if cancelled."""
+        if self.filterable:
+            self._all_items = list(self.items)
+            self._filter = ""
         selectable = self._selectable()
         if not selectable:
             return None
@@ -660,6 +693,25 @@ class Menu:
                     current_item = self.items[self._selected]
                     if isinstance(current_item, MenuGroupHeader):
                         return MenuResult(current_item, "enter")
+
+                elif self.filterable and key == KEY_BACKSPACE:
+                    if self._filter:
+                        self._filter = self._filter[:-1]
+                        self._apply_filter()
+                        selectable = self._selectable()
+                        self._selected = selectable[0] if selectable else 0
+                        self._scroll_offset = 0
+                        self._adjust_scroll()
+                        self._render()
+
+                elif self.filterable and isinstance(key, str) and len(key) == 1 and key.isprintable():
+                    self._filter += key
+                    self._apply_filter()
+                    selectable = self._selectable()
+                    self._selected = selectable[0] if selectable else 0
+                    self._scroll_offset = 0
+                    self._adjust_scroll()
+                    self._render()
 
                 elif THEME_SWITCHER_ENABLED and isinstance(key, str) and len(key) == 1 and key.upper() == 'C':
                     cycle_theme()
