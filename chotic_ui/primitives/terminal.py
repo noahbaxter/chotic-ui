@@ -68,6 +68,43 @@ def truncate_text(text: str, max_len: int, suffix: str = "...") -> str:
     return text[:max_len - len(suffix)] + suffix
 
 
+def visible_len(text: str) -> int:
+    """Printable width of text, ignoring ANSI color codes."""
+    return len(strip_ansi(text))
+
+
+def truncate_ansi(text: str, max_visible: int) -> str:
+    """Truncate to max_visible printable chars, preserving ANSI codes,
+    appending an ellipsis when truncated."""
+    if visible_len(text) <= max_visible:
+        return text
+    if max_visible <= 1:
+        return "…"
+    target = max_visible - 1
+    out, visible, i = [], 0, 0
+    while i < len(text):
+        if text[i] == "\x1b":
+            j = i + 1
+            while j < len(text) and text[j] != "m":
+                j += 1
+            out.append(text[i:j + 1])
+            i = j + 1
+            continue
+        if visible >= target:
+            out.append("…")
+            break
+        out.append(text[i])
+        visible += 1
+        i += 1
+    return "".join(out)
+
+
+def pad_to(text: str, width: int) -> str:
+    """Truncate (ANSI-aware) to width, then right-pad with spaces to width."""
+    text = truncate_ansi(text, width)
+    return text + " " * (width - visible_len(text))
+
+
 def get_available_width(reserved: int = 0, min_width: int = 20) -> int:
     """Get available terminal width minus reserved chars."""
     return max(min_width, get_terminal_width() - reserved)

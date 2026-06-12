@@ -14,40 +14,11 @@ from ..primitives import (
     Colors, getch, cbreak_noecho,
     KEY_UP, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_BACKSPACE, KEY_SPACE,
 )
-from ..primitives.terminal import strip_ansi, get_terminal_width
+from ..primitives.terminal import strip_ansi, get_terminal_width, visible_len, truncate_ansi
 from ..components import (
     print_header, box_row,
     BOX_TL, BOX_TR, BOX_BL, BOX_BR, BOX_H, BOX_V, BOX_TL_DIV, BOX_TR_DIV,
 )
-
-
-def _vis(text: str) -> int:
-    return len(strip_ansi(text))
-
-
-def _truncate_ansi(text: str, max_visible: int) -> str:
-    """Truncate to max_visible printable chars, preserving ANSI codes."""
-    if _vis(text) <= max_visible:
-        return text
-    if max_visible <= 1:
-        return "…"
-    target = max_visible - 1
-    out, visible, i = [], 0, 0
-    while i < len(text):
-        if text[i] == "\x1b":
-            j = i + 1
-            while j < len(text) and text[j] != "m":
-                j += 1
-            out.append(text[i:j + 1])
-            i = j + 1
-            continue
-        if visible >= target:
-            out.append("…")
-            break
-        out.append(text[i])
-        visible += 1
-        i += 1
-    return "".join(out)
 
 
 class FilterList:
@@ -109,8 +80,8 @@ class FilterList:
         lines = []
 
         def row(content):
-            content = _truncate_ansi(content, inner)
-            pad = inner - _vis(content)
+            content = truncate_ansi(content, inner)
+            pad = inner - visible_len(content)
             lines.append(f"{c}{BOX_V}{Colors.RESET} {content}{' ' * pad} {c}{BOX_V}{Colors.RESET}")
 
         lines.append(box_row(BOX_TL, BOX_H, BOX_TR, w, c))
@@ -123,7 +94,7 @@ class FilterList:
         # Query line
         count = f"{Colors.MUTED}{len(matches)} match{'es' if len(matches) != 1 else ''}{Colors.RESET}"
         query_disp = f"{Colors.PRIMARY}{self.prompt}:{Colors.RESET} {self._query}{Colors.PRIMARY}▌{Colors.RESET}"
-        gap = inner - _vis(query_disp) - _vis(count)
+        gap = inner - visible_len(query_disp) - visible_len(count)
         row(f"{query_disp}{' ' * max(1, gap)}{count}")
         lines.append(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
 

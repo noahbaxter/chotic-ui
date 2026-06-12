@@ -27,6 +27,9 @@ from .primitives import (
     Colors,
     rgb,
     set_theme,
+    visible_len,
+    truncate_ansi,
+    pad_to,
 )
 from .components import (
     configure_header,
@@ -68,6 +71,9 @@ __all__ = [
     "Colors",
     "rgb",
     "set_theme",
+    "visible_len",
+    "truncate_ansi",
+    "pad_to",
     "configure_header",
     "print_header",
     "invalidate_header_cache",
