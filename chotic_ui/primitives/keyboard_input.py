@@ -287,6 +287,11 @@ def input_with_esc(prompt: str = "") -> str:
     """
     Read a line of input, but allow ESC to cancel.
 
+    Holds one terminal mode for the entire line and drains input in chunks,
+    so a pasted string (e.g. a dragged-in file path) arrives intact. Toggling
+    raw mode per character races the tty line discipline during paste bursts
+    and reorders or drops characters.
+
     Args:
         prompt: Prompt to display
 
@@ -301,25 +306,55 @@ def input_with_esc(prompt: str = "") -> str:
 
     result = []
 
-    while True:
-        ch = getch()
+    if os.name == 'nt':
+        # Windows: msvcrt has no mode-toggle race; the per-char loop is fine.
+        while True:
+            ch = getch()
+            if not ch:
+                continue
+            elif ch == '\x1b':
+                print()
+                raise CancelInput()
+            elif ch in ('\r', '\n'):
+                print()
+                return ''.join(result)
+            elif ch in ('\x7f', '\x08'):
+                if result:
+                    result.pop()
+                    print('\b \b', end='', flush=True)
+            elif ch >= ' ':
+                result.append(ch)
+                print(ch, end='', flush=True)
 
-        if not ch:  # Empty (ignored key like arrow)
-            continue
-        elif ch == '\x1b':  # ESC
-            print()  # New line
-            raise CancelInput()
-        elif ch in ('\r', '\n'):  # Enter
-            print()  # New line
-            return ''.join(result)
-        elif ch == '\x7f' or ch == '\x08':  # Backspace
-            if result:
-                result.pop()
-                # Move cursor back, overwrite with space, move back again
-                print('\b \b', end='', flush=True)
-        elif ch >= ' ':  # Printable character
-            result.append(ch)
-            print(ch, end='', flush=True)
+    with cbreak_noecho() as fd:
+        while True:
+            select.select([sys.stdin], [], [], None)
+            chunk = os.read(fd, 4096).decode('utf-8', errors='replace')
+            i = 0
+            while i < len(chunk):
+                ch = chunk[i]
+                if ch == '\x1b':
+                    if len(chunk) == 1:  # standalone ESC pressed
+                        print()
+                        raise CancelInput()
+                    # Escape sequence (arrow key etc.): skip through its
+                    # terminator (a letter or ~) and ignore it.
+                    i += 1
+                    while i < len(chunk) and not (chunk[i].isalpha() or chunk[i] == '~'):
+                        i += 1
+                    i += 1
+                    continue
+                elif ch in ('\r', '\n'):
+                    print()
+                    return ''.join(result)
+                elif ch in ('\x7f', '\x08'):
+                    if result:
+                        result.pop()
+                        print('\b \b', end='', flush=True)
+                elif ch >= ' ':
+                    result.append(ch)
+                    print(ch, end='', flush=True)
+                i += 1
 
 
 def wait_for_key(prompt: str = "Press Enter to continue...", allow_esc: bool = True) -> bool:
