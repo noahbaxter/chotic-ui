@@ -66,8 +66,14 @@ class TwoPane:
             strips ANSI from the row's rendered (unfocused) label.
         keys: ``{char: callback() -> "return"|None}`` extra hotkeys; if a callback
             returns ``"return"`` ``run()`` returns that char.
-        footer: hint line drawn under the box (caller-styled). A default is used
-            when empty.
+        footer: hint line drawn under the box (caller-styled), or a ``() -> str``
+            callable recomputed each frame (e.g. a live plan line). A default is
+            used when empty.
+        right_header: bold label for the right pane's header band; when set it
+            replaces the filter/count line (use for a fixed-purpose right pane
+            like settings).
+        show_count: when False, hide the right-row count in the header band
+            (meaningless for fixed lists like settings).
         left_width: width of the left column in characters.
         left_enter_focuses_right: when True (default), Enter/Space on a left row
             moves focus to the right pane (drill-down, as the model picker wants).
@@ -79,10 +85,13 @@ class TwoPane:
     def __init__(self, *, title="", subtitle="", left_rows, right_rows,
                  on_left_enter=None, on_right_enter=None, right_filterable=True,
                  search_key=None, keys=None, footer="", left_width=22,
-                 left_header="", left_enter_focuses_right=True):
+                 left_header="", right_header="", show_count=True,
+                 left_enter_focuses_right=True):
         self.title = title
         self.subtitle = subtitle
         self.left_header = left_header
+        self.right_header = right_header
+        self.show_count = show_count
         self._left_rows = left_rows
         self._right_rows = right_rows
         self._on_left_enter = on_left_enter
@@ -158,15 +167,17 @@ class TwoPane:
         lines.append(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
 
         n = len(right)
-        if self.right_filterable:
-            filt = (f"{Colors.PRIMARY}Filter:{Colors.RESET} {self._query}{Colors.PRIMARY}▌{Colors.RESET}"
-                    if self.focus == "right"
-                    else f"{Colors.MUTED}(type to filter){Colors.RESET}")
+        if self.right_header:
+            left_part = f"{Colors.BOLD}{self.right_header}{Colors.RESET}"
+        elif self.right_filterable:
+            left_part = (f"{Colors.PRIMARY}Filter:{Colors.RESET} {self._query}{Colors.PRIMARY}▌{Colors.RESET}"
+                         if self.focus == "right"
+                         else f"{Colors.MUTED}(type to filter){Colors.RESET}")
         else:
-            filt = ""
-        count = f"{Colors.MUTED}{n}{Colors.RESET}"
-        pad = right_w - visible_len(filt) - visible_len(count)
-        two(f"{Colors.BOLD}{self.left_header}{Colors.RESET}", f"{filt}{' ' * max(1, pad)}{count}")
+            left_part = ""
+        count = f"{Colors.MUTED}{n}{Colors.RESET}" if self.show_count else ""
+        pad = right_w - visible_len(left_part) - visible_len(count)
+        two(f"{Colors.BOLD}{self.left_header}{Colors.RESET}", f"{left_part}{' ' * max(1, pad)}{count}")
         lines.append(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
 
         end = min(n, self._scroll + rows_h)
@@ -191,8 +202,9 @@ class TwoPane:
             two(lt, rt)
 
         lines.append(box_row(BOX_BL, BOX_H, BOX_BR, w, c))
-        if self.footer:
-            lines.append(self.footer)
+        footer = self.footer() if callable(self.footer) else self.footer
+        if footer:
+            lines.append(footer)
         else:
             lines.append(f"  {Colors.PRIMARY}Tab{Colors.MUTED} switch pane  {Colors.PRIMARY}↑/↓{Colors.MUTED} move  "
                          f"{Colors.PRIMARY}Enter{Colors.MUTED} set  {Colors.PRIMARY}Esc{Colors.MUTED} done  "
