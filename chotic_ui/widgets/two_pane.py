@@ -106,6 +106,10 @@ class TwoPane:
         if not left:
             return None
         i = max(0, min(self._left_cursor, len(left) - 1))
+        if not left[i][2]:                       # snap off a non-selectable row
+            sel = self._selectable_indices(left)
+            if sel:
+                i = min(sel, key=lambda j: abs(j - i))
         return left[i][1]
 
     def _filtered_right(self, right):
@@ -255,7 +259,7 @@ class TwoPane:
                         if self._on_left_enter:
                             self._on_left_enter(self._active_left_value(left))
                         self.focus = "right"
-                    elif right and right[self._cursor][2]:
+                    elif self._cursor < len(right) and right[self._cursor][2]:
                         if self._on_right_enter:
                             self._on_right_enter(right[self._cursor][1])
                 elif key == KEY_BACKSPACE:
@@ -278,7 +282,7 @@ class TwoPane:
                         self._cursor = self._scroll = 0
 
     def _move_left(self, left, delta):
-        sel = self._selectable_indices(left) or list(range(len(left)))
+        sel = self._selectable_indices(left)
         if not sel:
             return
         cur = self._left_cursor
