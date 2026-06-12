@@ -12,6 +12,7 @@ from .menu import (
 )
 from .confirm import ConfirmDialog
 from .filter_list import FilterList
+from .two_pane import TwoPane
 
 __all__ = [
     "Menu",
@@ -22,4 +23,5 @@ __all__ = [
     "MenuResult",
     "ConfirmDialog",
     "FilterList",
+    "TwoPane",
 ]

@@ -47,6 +47,7 @@ from .widgets import (
     MenuResult,
     ConfirmDialog,
     FilterList,
+    TwoPane,
 )
 
 __version__ = "0.1.0"
@@ -87,4 +88,5 @@ __all__ = [
     "MenuResult",
     "ConfirmDialog",
     "FilterList",
+    "TwoPane",
 ]
