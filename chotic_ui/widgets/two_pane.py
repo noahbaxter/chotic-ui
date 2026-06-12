@@ -26,7 +26,7 @@ from ..primitives import (
     Colors, getch, cbreak_noecho,
     KEY_UP, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_TAB, KEY_BACKSPACE, KEY_SPACE,
 )
-from ..primitives.terminal import strip_ansi, visible_len, pad_to
+from ..primitives.terminal import strip_ansi, visible_len, pad_to, truncate_ansi
 from ..components import (
     print_header, box_row,
     BOX_TL, BOX_TR, BOX_BL, BOX_BR, BOX_H, BOX_V, BOX_TL_DIV, BOX_TR_DIV,
@@ -101,6 +101,9 @@ class TwoPane:
             or "color" (accent the whole row). All reserve the same 2-col gutter.
         header_style: how the active pane header is emphasised. One of "chip" (an
             inverted reverse-video chip, the default), "bold", or "color".
+        detail: ``(focused_right_value) -> str`` optional; its result is drawn as
+            a full-width line under the box (above the footer), so the focused
+            right row's full text stays visible without being cramped in-column.
 
     A Row is ``(render(focused, cursor) -> str, value, selectable)``.
     """
@@ -110,7 +113,7 @@ class TwoPane:
                  search_key=None, keys=None, footer="", left_width=22,
                  left_header="", right_header="", show_count=True,
                  left_enter_focuses_right=True,
-                 cursor_style="marker", header_style="chip"):
+                 cursor_style="marker", header_style="chip", detail=None):
         self.title = title
         self.subtitle = subtitle
         self.left_header = left_header
@@ -128,6 +131,7 @@ class TwoPane:
         self.left_enter_focuses_right = left_enter_focuses_right
         self.cursor_style = cursor_style
         self.header_style = header_style
+        self._detail = detail
 
         self.focus = "left"
         self._left_cursor = 0
@@ -279,6 +283,10 @@ class TwoPane:
             two(lt, rt, lt_state, rt_state)
 
         lines.append(box_row(BOX_BL, BOX_H, BOX_BR, w, c))
+        if self._detail:
+            fv = right[self._cursor][1] if 0 <= self._cursor < n and right[self._cursor][2] else None
+            dtext = self._detail(fv) if fv is not None else ""
+            lines.append("  " + truncate_ansi(dtext, w - 2) if dtext else "")
         footer = self.footer() if callable(self.footer) else self.footer
         if footer:
             lines.append(footer)
