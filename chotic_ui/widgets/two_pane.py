@@ -69,6 +69,9 @@ class TwoPane:
         footer: hint line drawn under the box (caller-styled). A default is used
             when empty.
         left_width: width of the left column in characters.
+        left_enter_focuses_right: when True (default), Enter/Space on a left row
+            moves focus to the right pane (drill-down, as the model picker wants).
+            When False, focus stays on the left pane (multi-select toggling).
 
     A Row is ``(render(focused, cursor) -> str, value, selectable)``.
     """
@@ -76,7 +79,7 @@ class TwoPane:
     def __init__(self, *, title="", subtitle="", left_rows, right_rows,
                  on_left_enter=None, on_right_enter=None, right_filterable=True,
                  search_key=None, keys=None, footer="", left_width=22,
-                 left_header=""):
+                 left_header="", left_enter_focuses_right=True):
         self.title = title
         self.subtitle = subtitle
         self.left_header = left_header
@@ -89,6 +92,7 @@ class TwoPane:
         self.keys = keys or {}
         self.footer = footer
         self.left_width = left_width
+        self.left_enter_focuses_right = left_enter_focuses_right
 
         self.focus = "left"
         self._left_cursor = 0
@@ -258,7 +262,8 @@ class TwoPane:
                     if self.focus == "left":
                         if self._on_left_enter:
                             self._on_left_enter(self._active_left_value(left))
-                        self.focus = "right"
+                        if self.left_enter_focuses_right:
+                            self.focus = "right"
                     elif self._cursor < len(right) and right[self._cursor][2]:
                         if self._on_right_enter:
                             self._on_right_enter(right[self._cursor][1])
@@ -270,6 +275,9 @@ class TwoPane:
                     if self.focus == "right" and self.right_filterable:
                         self._query += " "
                         self._cursor = self._scroll = 0
+                    elif self.focus == "right" and not self.right_filterable:
+                        if self._cursor < len(right) and right[self._cursor][2] and self._on_right_enter:
+                            self._on_right_enter(right[self._cursor][1])
                     elif self.focus == "left" and self._on_left_enter:
                         self._on_left_enter(self._active_left_value(left))
                 elif isinstance(key, str) and len(key) == 1 and key.isprintable():
