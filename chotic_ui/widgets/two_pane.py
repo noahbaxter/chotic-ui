@@ -166,9 +166,15 @@ class TwoPane:
             row(f"{Colors.BOLD}{self.title}{Colors.RESET}")
         lines.append(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
 
+        def hdr(label, active):
+            # Active pane header lights up as an inverted chip; inactive is muted.
+            if active:
+                return f"{Colors.REVERSE}{Colors.BOLD} {label} {Colors.RESET}"
+            return f"{Colors.BOLD}{Colors.MUTED}{label}{Colors.RESET}"
+
         n = len(right)
         if self.right_header:
-            left_part = f"{Colors.BOLD}{self.right_header}{Colors.RESET}"
+            left_part = hdr(self.right_header, self.focus == "right")
         elif self.right_filterable:
             left_part = (f"{Colors.PRIMARY}Filter:{Colors.RESET} {self._query}{Colors.PRIMARY}▌{Colors.RESET}"
                          if self.focus == "right"
@@ -177,7 +183,8 @@ class TwoPane:
             left_part = ""
         count = f"{Colors.MUTED}{n}{Colors.RESET}" if self.show_count else ""
         pad = right_w - visible_len(left_part) - visible_len(count)
-        two(f"{Colors.BOLD}{self.left_header}{Colors.RESET}", f"{left_part}{' ' * max(1, pad)}{count}")
+        two(hdr(self.left_header, self.focus == "left"),
+            f"{left_part}{' ' * max(1, pad)}{count}")
         lines.append(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
 
         end = min(n, self._scroll + rows_h)

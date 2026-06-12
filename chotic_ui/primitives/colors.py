@@ -389,6 +389,7 @@ class Colors:
     BOLD = "\x1b[1m"
     DIM = "\x1b[2m"
     ITALIC = "\x1b[3m"
+    REVERSE = "\x1b[7m"   # swap fg/bg: a highlighted "chip" (e.g. active pane header)
     DIM_HOVER = "\x1b[38;2;140;150;160m"
     MUTED = "\x1b[38;2;148;163;184m"
     MUTED_DIM = "\x1b[38;2;90;100;110m"
