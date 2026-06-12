@@ -72,7 +72,7 @@ class TwoPane:
         title: bold heading drawn in the top band.
         subtitle: muted text shown beside the title.
         left_rows: ``() -> list[Row]`` rows for the left pane.
-        right_rows: ``(active_left_value) -> list[Row]`` rows for the right pane,
+        right_rows: ``(active_left_value, query) -> list[Row]`` rows for the right pane,
             rebuilt whenever the active left row changes. ``active_left_value`` is
             the value of the left row under the left cursor (or None if empty).
         on_left_enter: ``(value) -> None`` Enter on a focused left row (after the
@@ -306,7 +306,7 @@ class TwoPane:
         (left, right) row lists used, for headless inspection."""
         left = self._left_rows()
         self._left_cursor = max(0, min(self._left_cursor, len(left) - 1)) if left else 0
-        right = self._filtered_right(self._right_rows(self._active_left_value(left)))
+        right = self._filtered_right(self._right_rows(self._active_left_value(left), self._query))
         term = shutil.get_terminal_size((80, 24))
         rows_h = body_height(term[1], max(len(left), len(right)), len(left))
         self._clamp(right, rows_h)
@@ -334,7 +334,7 @@ class TwoPane:
             while True:
                 left = self._left_rows()
                 self._left_cursor = max(0, min(self._left_cursor, len(left) - 1)) if left else 0
-                right = self._filtered_right(self._right_rows(self._active_left_value(left)))
+                right = self._filtered_right(self._right_rows(self._active_left_value(left), self._query))
                 term = shutil.get_terminal_size((80, 24))
                 rows_h = body_height(term[1], max(len(left), len(right)), len(left))
                 self._clamp(right, rows_h)
