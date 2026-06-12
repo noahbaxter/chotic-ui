@@ -390,6 +390,7 @@ class Colors:
     DIM = "\x1b[2m"
     ITALIC = "\x1b[3m"
     REVERSE = "\x1b[7m"   # swap fg/bg: a highlighted "chip" (e.g. active pane header)
+    HIGHLIGHT_BG = "\x1b[48;2;55;62;82m"   # subtle slate row highlight (cursor row)
     DIM_HOVER = "\x1b[38;2;140;150;160m"
     MUTED = "\x1b[38;2;148;163;184m"
     MUTED_DIM = "\x1b[38;2;90;100;110m"

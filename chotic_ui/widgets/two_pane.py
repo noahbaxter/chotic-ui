@@ -13,8 +13,10 @@ The widget knows nothing about what the rows mean. Each row is a tuple:
 
 `render` is called per visible row and returns the (possibly ANSI-coloured)
 label for that row, told whether its pane has focus and whether it sits under
-the cursor, so the caller draws its own markers. Non-selectable rows
-(``selectable=False``, e.g. section headers) are skipped by the cursor.
+the cursor. The widget OWNS the cursor/focus indicator (a marker, row highlight,
+bold, or accent colour, chosen via ``cursor_style``); the caller draws only its
+own data marks (e.g. a selection dot). Non-selectable rows (``selectable=False``,
+e.g. section headers) are skipped by the cursor.
 """
 
 import sys
@@ -29,6 +31,22 @@ from ..components import (
     print_header, box_row,
     BOX_TL, BOX_TR, BOX_BL, BOX_BR, BOX_H, BOX_V, BOX_TL_DIV, BOX_TR_DIV,
 )
+
+
+# Cursor-state for a visible row.
+FOCUS_CURSOR = "focus"   # cursor row in the currently focused pane
+FAINT_CURSOR = "faint"   # left pane's active row while focus is on the right
+NONE = "none"
+
+
+def _restyle(text, code):
+    """Re-apply an ANSI `code` across a string that contains full resets, so the
+    style spans the whole row (and its padding) despite embedded Colors.RESET.
+
+    >>> _restyle("a" + Colors.RESET + "b", "<C>") == "<C>a" + Colors.RESET + "<C>b" + Colors.RESET
+    True
+    """
+    return code + text.replace(Colors.RESET, Colors.RESET + code) + Colors.RESET
 
 
 def body_height(term_lines, n_rows, min_rows):
@@ -78,6 +96,11 @@ class TwoPane:
         left_enter_focuses_right: when True (default), Enter/Space on a left row
             moves focus to the right pane (drill-down, as the model picker wants).
             When False, focus stays on the left pane (multi-select toggling).
+        cursor_style: how the focused row is indicated. One of "marker" (a ``▸``/
+            ``•`` glyph, the default), "highlight" (slate row background), "bold",
+            or "color" (accent the whole row). All reserve the same 2-col gutter.
+        header_style: how the active pane header is emphasised. One of "chip" (an
+            inverted reverse-video chip, the default), "bold", or "color".
 
     A Row is ``(render(focused, cursor) -> str, value, selectable)``.
     """
@@ -86,7 +109,8 @@ class TwoPane:
                  on_left_enter=None, on_right_enter=None, right_filterable=True,
                  search_key=None, keys=None, footer="", left_width=22,
                  left_header="", right_header="", show_count=True,
-                 left_enter_focuses_right=True):
+                 left_enter_focuses_right=True,
+                 cursor_style="marker", header_style="chip"):
         self.title = title
         self.subtitle = subtitle
         self.left_header = left_header
@@ -102,6 +126,8 @@ class TwoPane:
         self.footer = footer
         self.left_width = left_width
         self.left_enter_focuses_right = left_enter_focuses_right
+        self.cursor_style = cursor_style
+        self.header_style = header_style
 
         self.focus = "left"
         self._left_cursor = 0
@@ -157,8 +183,34 @@ class TwoPane:
             pad = inner - visible_len(content)
             lines.append(f"{c}{BOX_V}{Colors.RESET} {content}{' ' * max(0, pad)} {c}{BOX_V}{Colors.RESET}")
 
-        def two(lt, rt):
-            row(f"{pad_to(lt, left_w)} {Colors.DIM}{BOX_V}{Colors.RESET} {pad_to(rt, right_w)}")
+        def cell(text, cstate, width):
+            """Pad `text` to `width`, then apply the cursor indicator/emphasis for
+            `cstate`, always reserving a 2-col indicator gutter so every row keeps
+            the same width and left inset."""
+            style = self.cursor_style
+            if style == "marker":
+                if cstate == FOCUS_CURSOR:
+                    lead = f"{Colors.PRIMARY}▸{Colors.RESET} "   # "▸ "
+                elif cstate == FAINT_CURSOR:
+                    lead = f"{Colors.PRIMARY}•{Colors.RESET} "   # "• "
+                else:
+                    lead = "  "
+                return lead + pad_to(text, width - 2)
+            # non-marker styles: reserve the same 2-col gutter
+            lead = f"{Colors.PRIMARY}•{Colors.RESET} " if cstate == FAINT_CURSOR else "  "
+            padded = pad_to(text, width - 2)
+            if cstate == FOCUS_CURSOR:
+                if style == "highlight":
+                    return _restyle(lead + padded, Colors.HIGHLIGHT_BG)
+                if style == "bold":
+                    return _restyle(lead + padded, Colors.BOLD)
+                if style == "color":
+                    return _restyle(lead + padded, Colors.PRIMARY)
+            return lead + padded
+
+        def two(lt, rt, lt_state=NONE, rt_state=NONE):
+            row(f"{cell(lt, lt_state, left_w)} {Colors.DIM}{BOX_V}{Colors.RESET} "
+                f"{cell(rt, rt_state, right_w)}")
 
         if self.subtitle:
             row(f"{Colors.BOLD}{self.title}{Colors.RESET}  {Colors.MUTED}{self.subtitle}{Colors.RESET}")
@@ -167,7 +219,16 @@ class TwoPane:
         lines.append(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
 
         def hdr(label, active):
-            # Active pane header lights up as an inverted chip; inactive is muted.
+            # Active pane header emphasis is switchable via header_style.
+            if self.header_style == "bold":
+                if active:
+                    return f"{Colors.BOLD}{Colors.PRIMARY}{label}{Colors.RESET}"
+                return f"{Colors.BOLD}{Colors.MUTED}{label}{Colors.RESET}"
+            if self.header_style == "color":
+                if active:
+                    return f"{Colors.PRIMARY}{label}{Colors.RESET}"
+                return f"{Colors.MUTED}{label}{Colors.RESET}"
+            # "chip": inverted reverse-video chip on the active pane.
             if active:
                 return f"{Colors.REVERSE}{Colors.BOLD} {label} {Colors.RESET}"
             return f"{Colors.BOLD}{Colors.MUTED}{label}{Colors.RESET}"
@@ -182,7 +243,8 @@ class TwoPane:
         else:
             left_part = ""
         count = f"{Colors.MUTED}{n}{Colors.RESET}" if self.show_count else ""
-        pad = right_w - visible_len(left_part) - visible_len(count)
+        # cell() reserves a 2-col indicator gutter, so the usable width here is right_w - 2.
+        pad = right_w - 2 - visible_len(left_part) - visible_len(count)
         two(hdr(self.left_header, self.focus == "left"),
             f"{left_part}{' ' * max(1, pad)}{count}")
         lines.append(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
@@ -190,23 +252,31 @@ class TwoPane:
         end = min(n, self._scroll + rows_h)
         for r in range(rows_h):
             # left column
+            lt_state = NONE
             if r < len(left):
                 render, _, _ = left[r]
-                lt = render(self.focus == "left", r == self._left_cursor)
+                is_cur = r == self._left_cursor
+                lt = render(self.focus == "left", is_cur)
+                if is_cur:
+                    lt_state = FOCUS_CURSOR if self.focus == "left" else FAINT_CURSOR
             else:
                 lt = ""
             # right column: scrolled window
             idx = self._scroll + r
+            rt_state = NONE
             if r == 0 and self._scroll > 0:
-                rt = f"{Colors.MUTED}  ▲ {self._scroll} above{Colors.RESET}"
+                rt = f"{Colors.MUTED}▲ {self._scroll} above{Colors.RESET}"
             elif r == rows_h - 1 and end < n:
-                rt = f"{Colors.MUTED}  ▼ {n - end} below{Colors.RESET}"
+                rt = f"{Colors.MUTED}▼ {n - end} below{Colors.RESET}"
             elif idx < n:
                 render, _, sel = right[idx]
-                rt = pad_to(render(self.focus == "right", idx == self._cursor and sel), right_w)
+                is_cur = idx == self._cursor and sel
+                rt = render(self.focus == "right", is_cur)
+                if is_cur and self.focus == "right":
+                    rt_state = FOCUS_CURSOR
             else:
                 rt = ""
-            two(lt, rt)
+            two(lt, rt, lt_state, rt_state)
 
         lines.append(box_row(BOX_BL, BOX_H, BOX_BR, w, c))
         footer = self.footer() if callable(self.footer) else self.footer
