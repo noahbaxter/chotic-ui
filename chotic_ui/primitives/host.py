@@ -56,5 +56,5 @@ def bootstrap(title: str | None = None) -> None:
     processing and, if given, sets the host window title. Safe to call on every
     platform and in headless/redirected contexts."""
     enable_windows_vt()
-    if title:
+    if title and sys.stdout.isatty():
         set_window_title(title)
