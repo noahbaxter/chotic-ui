@@ -49,3 +49,12 @@ def set_window_title(title: str) -> None:
     BEL (\\x07) string terminator for the widest compatibility."""
     sys.stdout.write(f"\x1b]2;{title}\x07")
     sys.stdout.flush()
+
+
+def bootstrap(title: str | None = None) -> None:
+    """Call once at app startup, before any TUI rendering. Enables Windows VT
+    processing and, if given, sets the host window title. Safe to call on every
+    platform and in headless/redirected contexts."""
+    enable_windows_vt()
+    if title:
+        set_window_title(title)
