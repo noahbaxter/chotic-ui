@@ -56,6 +56,11 @@ from .colors import (
     set_theme,
     THEME_SWITCHER_ENABLED,
 )
+from .host import (
+    enable_windows_vt,
+    set_window_title,
+    bootstrap,
+)
 
 __all__ = [
     # Terminal
@@ -106,4 +111,8 @@ __all__ = [
     "get_theme_name",
     "cycle_theme",
     "set_theme",
+    # Native host
+    "enable_windows_vt",
+    "set_window_title",
+    "bootstrap",
 ]

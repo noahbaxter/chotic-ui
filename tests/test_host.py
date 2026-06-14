@@ -29,3 +29,10 @@ def test_bootstrap_without_title_emits_nothing(capsys):
     host.bootstrap()
     out = capsys.readouterr().out
     assert out == ""
+
+
+def test_shims_exported_at_top_level():
+    import chotic_ui
+    assert callable(chotic_ui.bootstrap)
+    assert callable(chotic_ui.set_window_title)
+    assert callable(chotic_ui.enable_windows_vt)

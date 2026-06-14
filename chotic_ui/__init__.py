@@ -30,6 +30,9 @@ from .primitives import (
     visible_len,
     truncate_ansi,
     pad_to,
+    enable_windows_vt,
+    set_window_title,
+    bootstrap,
 )
 from .components import (
     configure_header,
@@ -75,6 +78,9 @@ __all__ = [
     "visible_len",
     "truncate_ansi",
     "pad_to",
+    "enable_windows_vt",
+    "set_window_title",
+    "bootstrap",
     "configure_header",
     "print_header",
     "invalidate_header_cache",
