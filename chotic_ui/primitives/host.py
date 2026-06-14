@@ -41,3 +41,11 @@ def enable_windows_vt() -> bool:
         return True
     except Exception:
         return False
+
+
+def set_window_title(title: str) -> None:
+    """Set the terminal/host window title via OSC 2. Honored by every modern
+    terminal and by the bundled WezTerm host, identically across OSes. Uses the
+    BEL (\\x07) string terminator for the widest compatibility."""
+    sys.stdout.write(f"\x1b]2;{title}\x07")
+    sys.stdout.flush()
