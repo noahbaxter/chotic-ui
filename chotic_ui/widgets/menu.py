@@ -9,6 +9,7 @@ import sys
 import time
 import signal
 import shutil
+import textwrap
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -159,6 +160,9 @@ class Menu:
     esc_label: str = "Back"
     items: list = field(default_factory=list)
     column_header: str = ""  # Right-aligned header row rendered after title divider
+    detail_pane: bool = False  # Show the selected item's description as wrapped
+                               # text below the items instead of a right-hand
+                               # column. For descriptions too long to fit inline.
     status_line: str = ""  # Rendered below menu box (for scan progress, etc.)
     filterable: bool = False  # Opt-in: press / to enter a live type-to-filter mode
     filter_prompt: str = "Filter"
@@ -235,8 +239,12 @@ class Menu:
         """Calculate base capacity for scrollable items (without scroll indicators)."""
         term_height = shutil.get_terminal_size().lines
         fixed_lines = 8 + 4 + 1 + 1  # Header + box + hint + buffer
+        w = self._width()
         if self.subtitle:
-            fixed_lines += 1
+            fixed_lines += len(self._subtitle_lines(w))
+        detail = self._detail_lines(w)
+        if detail:
+            fixed_lines += len(detail) + 1  # + divider
         if self.column_header:
             fixed_lines += 1
         if self.footer:
@@ -343,6 +351,34 @@ class Menu:
         pos = (pos + delta) % len(selectable)
         self._selected = selectable[pos]
 
+    def _wrap(self, text: str, width: int) -> list[str]:
+        """Wrap plain text to width, never returning zero lines."""
+        if not text:
+            return []
+        return textwrap.wrap(strip_ansi(text), max(width, 8)) or [""]
+
+    def _subtitle_lines(self, w: int) -> list[str]:
+        return self._wrap(self.subtitle, w - 4)
+
+    def _detail_lines(self, w: int) -> list[str]:
+        """Wrapped description of the selected item, padded to a fixed height.
+
+        Height is the worst case across all items so the box does not resize as
+        the selection moves.
+        """
+        if not self.detail_pane:
+            return []
+        width = w - 6
+        height = max((len(self._wrap(getattr(i, "description", "") or "", width))
+                      for i in self.items), default=0)
+        if not height:
+            return []
+        current = ""
+        if 0 <= self._selected < len(self.items):
+            current = getattr(self.items[self._selected], "description", "") or ""
+        lines = self._wrap(current, width)
+        return lines + [""] * (height - len(lines))
+
     def _width(self) -> int:
         """Return menu width based on terminal size."""
         return shutil.get_terminal_size().columns - 2
@@ -398,7 +434,7 @@ class Menu:
             hotkey_len = (len(item.hotkey) + 2 + len(hotkey_pad)) if item.hotkey else 0
 
             # Truncate label to ensure description columns always fit
-            if item.description:
+            if item.description and not self.detail_pane:
                 desc_vis = len(strip_ansi(item.description))
                 if desc_vis > 0:
                     max_label = w - 4 - pfx_width - toggle_len - hotkey_len - desc_vis - 2
@@ -426,7 +462,7 @@ class Menu:
             # Build right side (description, right-aligned)
             right = ""
             right_visible = 0
-            if item.description:
+            if item.description and not self.detail_pane:
                 desc_visible = len(strip_ansi(item.description))
                 available = w - 4 - left_visible
                 if desc_visible > 0 and desc_visible + 2 <= available:
@@ -477,10 +513,10 @@ class Menu:
                 pad = w - 4 - len(self.title)
                 left = pad // 2
                 print(f"{c}{BOX_V}{Colors.RESET} {' ' * left}{Colors.BOLD}{self.title}{Colors.RESET}{' ' * (pad - left)} {c}{BOX_V}{Colors.RESET}")
-                if self.subtitle:
-                    sub_pad = w - 4 - len(strip_ansi(self.subtitle))
+                for sub_line in self._subtitle_lines(w):
+                    sub_pad = w - 4 - len(sub_line)
                     sub_left = sub_pad // 2
-                    print(f"{c}{BOX_V}{Colors.RESET} {' ' * sub_left}{Colors.MUTED}{self.subtitle}{Colors.RESET}{' ' * (sub_pad - sub_left)} {c}{BOX_V}{Colors.RESET}")
+                    print(f"{c}{BOX_V}{Colors.RESET} {' ' * sub_left}{Colors.MUTED}{sub_line}{Colors.RESET}{' ' * (sub_pad - sub_left)} {c}{BOX_V}{Colors.RESET}")
                 print(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
 
             # Column header (right-aligned, after title divider)
@@ -512,6 +548,14 @@ class Menu:
             # Render pinned items
             for orig_idx, item in pinned:
                 self._render_item(orig_idx, item, w, c)
+
+            # Detail pane for the selected item
+            detail = self._detail_lines(w)
+            if detail:
+                print(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
+                for line in detail:
+                    print(f"{c}{BOX_V}{Colors.RESET}   {Colors.MUTED}{line}{Colors.RESET}"
+                          f"{' ' * (w - 6 - len(line))} {c}{BOX_V}{Colors.RESET}")
 
             # Footer
             if self.footer:
