@@ -428,8 +428,11 @@ class Menu:
                     hotkey = f"{Colors.DIM_HOVER}[{item.hotkey}]{Colors.RESET}{hotkey_pad}" if item.hotkey else ""
                     left = f"{sel_pfx}{toggle_prefix}{hotkey}{Colors.DIM_HOVER}{label_text}{Colors.RESET}"
                 else:
+                    # An explicit grey, not the DIM attribute: DIM only shades the
+                    # default foreground, which lands a hair off an enabled row and
+                    # is unreadable as a state on most terminals.
                     hotkey = f"{Colors.DIM}[{item.hotkey}]{Colors.RESET}{hotkey_pad}" if item.hotkey else ""
-                    left = f"{unsel_pfx}{toggle_prefix}{hotkey}{Colors.DIM}{label_text}{Colors.RESET}"
+                    left = f"{unsel_pfx}{toggle_prefix}{hotkey}{Colors.MUTED_DIM}{label_text}{Colors.RESET}"
             else:
                 hotkey = f"{Colors.PRIMARY}[{item.hotkey}]{Colors.RESET}{hotkey_pad}" if item.hotkey else ""
                 if selected:
