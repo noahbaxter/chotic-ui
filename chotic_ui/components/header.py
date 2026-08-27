@@ -10,6 +10,8 @@ from ..primitives import Colors, rgb, get_gradient_color
 from ..primitives.colors import get_theme_name, THEME_SWITCHER_ENABLED
 
 
+ERASE_EOL = "\033[K"
+
 _ascii_art = ""
 _version = ""
 _header_cache = None
@@ -73,6 +75,9 @@ def print_header() -> None:
                 version_line += f"  {Colors.MUTED}theme: {Colors.PRIMARY}{current_theme}{Colors.RESET}"
             cached_lines.append(version_line)
         cached_lines.append("")
-        _header_cache = "\n".join(cached_lines)
+        # Each line erases to end of line. Callers repaint in place from the
+        # home position, so a banner line that stops at its own last glyph
+        # leaves the previous frame's text sitting to the right of it.
+        _header_cache = "\n".join(line + ERASE_EOL for line in cached_lines)
 
-    print(f"\n{_header_cache}")
+    print(f"{ERASE_EOL}\n{_header_cache}")
