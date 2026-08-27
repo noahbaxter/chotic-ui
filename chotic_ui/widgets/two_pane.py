@@ -23,12 +23,12 @@ import sys
 import shutil
 
 from ..primitives import (
-    Colors, getch, cbreak_noecho,
+    Colors, getch, getch_with_timeout, cbreak_noecho,
     KEY_UP, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_TAB, KEY_BACKSPACE, KEY_SPACE,
 )
 from ..primitives.terminal import strip_ansi, visible_len, pad_to, truncate_ansi
 from ..components import (
-    print_header, box_row,
+    print_header, header_height, box_row,
     BOX_TL, BOX_TR, BOX_BL, BOX_BR, BOX_H, BOX_V, BOX_TL_DIV, BOX_TR_DIV,
 )
 
@@ -49,20 +49,36 @@ def _restyle(text, code):
     return code + text.replace(Colors.RESET, Colors.RESET + code) + Colors.RESET
 
 
-def body_height(term_lines, n_rows, min_rows):
-    """Visible body rows: enough for the widest pane and the rows on screen,
-    capped to terminal height and floored at ``min_rows``.
+# Rows the frame spends on the box itself: top edge, title band, the rule under
+# it, the pane-header band, the rule under that, and the bottom edge.
+BOX_LINES = 6
+# Fallback when no banner is configured: box + one footer line.
+CHROME_LINES = BOX_LINES + 1
+MIN_BODY = 3
 
-    >>> body_height(40, 30, 5)
-    26
-    >>> body_height(24, 30, 5)
-    10
-    >>> body_height(24, 1, 5)
+
+def body_height(term_lines, n_rows, min_rows=0, chrome=CHROME_LINES):
+    """Visible body rows: as tall as the tallest pane, never taller than the
+    window can show.
+
+    ``min_rows`` is a floor, not an override -- applying it with an outer max()
+    grew the box past the window and pushed the banner off the top. ``chrome``
+    is every row the frame spends on something other than body, banner included;
+    guessing it low scrolls the terminal, which reads as flicker.
+
+    >>> body_height(40, 30, 5, chrome=17)
+    23
+    >>> body_height(24, 30, 5, chrome=17)      # clamped to the window, not 30
+    7
+    >>> body_height(24, 1, 5, chrome=17)
     5
-    >>> body_height(40, 3, 8)
-    8
+    >>> body_height(24, 40, 20, chrome=17)     # floor never beats the window
+    7
+    >>> body_height(12, 40, 0, chrome=17)      # never below the floor
+    3
     """
-    return max(min_rows, min(term_lines - 14, max(n_rows, 1)))
+    available = max(MIN_BODY, term_lines - chrome)
+    return max(MIN_BODY, min(available, max(n_rows, min_rows, 1)))
 
 
 class TwoPane:
@@ -76,8 +92,11 @@ class TwoPane:
             rebuilt whenever the active left row changes. ``active_left_value`` is
             the value of the left row under the left cursor (or None if empty).
         on_left_enter: ``(value) -> None`` Enter on a focused left row (after the
-            first Enter, which just moves focus to the right pane).
-        on_right_enter: ``(value) -> None`` Enter on a focused right row.
+            first Enter, which just moves focus to the right pane). Returning
+            anything other than None ends ``run()`` and becomes its return value,
+            so a row can hand an action back to the caller.
+        on_right_enter: ``(value) -> None`` Enter on a focused right row. Returning
+            anything other than None ends ``run()`` and becomes its return value.
         right_filterable: when True, typing (with the right pane focused) builds a
             filter query applied to the right rows via ``search_key``.
         search_key: ``(value) -> str`` the text a right row is filtered on. Default
@@ -113,7 +132,10 @@ class TwoPane:
                  search_key=None, keys=None, footer="", left_width=22,
                  left_header="", right_header="", show_count=True,
                  left_enter_focuses_right=True,
-                 cursor_style="marker", header_style="chip", detail=None):
+                 cursor_style="marker", header_style="chip", detail=None,
+                 update_callback=None, refresh_interval_ms=250,
+                 on_left_space=None, space_activates=False, footer_lines=1,
+                 fill_height=False):
         self.title = title
         self.subtitle = subtitle
         self.left_header = left_header
@@ -132,6 +154,30 @@ class TwoPane:
         self.cursor_style = cursor_style
         self.header_style = header_style
         self._detail = detail
+        # Called on each idle poll; return True to repaint. Rows are rebuilt
+        # every frame, so a repaint is all a live-data screen needs.
+        self.update_callback = update_callback
+        self.refresh_interval_ms = refresh_interval_ms
+        # Space on a left row, when it means something different from Enter
+        # (toggle vs drill in). Falls back to on_left_enter when unset.
+        self._on_left_space = on_left_space
+        # Give Space to the focused row even on a filterable pane. A list whose
+        # primary verb is "toggle" needs it more than the filter needs spaces.
+        self.space_activates = space_activates
+        # How many lines the caller's footer occupies, so the body can give them
+        # back to the window instead of shoving the banner off the top.
+        self.footer_lines = footer_lines
+        # Tallest content seen so far. The box sizes to this rather than to the
+        # current right pane, so switching to a drive with three setlists does
+        # not collapse the frame and switching back does not grow it again.
+        # Size the body to the window rather than to the rows. A screen that is
+        # returned to repeatedly wants a frame that stays put; sizing to content
+        # means it comes back smaller than the window that holds it.
+        self.fill_height = fill_height
+        # First frame of a run clears the screen; later ones overwrite in place.
+        # Clearing every time flickers, never clearing leaves whatever the
+        # screen we just came back from left behind.
+        self._painted = False
 
         self.focus = "left"
         self._left_cursor = 0
@@ -144,6 +190,26 @@ class TwoPane:
     @staticmethod
     def _selectable_indices(rows):
         return [i for i, r in enumerate(rows) if r[2]]
+
+    def _clamp_left(self, left):
+        """Keep the left cursor on a row that can actually be chosen.
+
+        The cursor is set from a caller's remembered position and from plain
+        arithmetic on the row count, neither of which knows that section headers
+        are not selectable -- so without this a fresh screen opens with the
+        highlight sitting on a header nobody can act on."""
+        if not left:
+            self._left_cursor = 0
+            return
+        self._left_cursor = max(0, min(self._left_cursor, len(left) - 1))
+        if left[self._left_cursor][2]:
+            return
+        sel = self._selectable_indices(left)
+        if sel:
+            # Prefer the next selectable row below, so opening on a header lands
+            # on the first thing under it rather than jumping backwards.
+            below = [i for i in sel if i > self._left_cursor]
+            self._left_cursor = below[0] if below else sel[-1]
 
     def _active_left_value(self, left):
         if not left:
@@ -174,9 +240,21 @@ class TwoPane:
 
     # --- rendering ---
 
+    def _chrome_lines(self) -> int:
+        """Everything the frame draws that is not a body row."""
+        return (header_height() + BOX_LINES + self.footer_lines
+                + (1 if self._detail else 0))
+
+    def _body_rows(self, left, right, term):
+        chrome = self._chrome_lines()
+        if self.fill_height:
+            return max(MIN_BODY, term[1] - chrome)
+        return body_height(term[1], max(len(left), len(right)), len(left),
+                           chrome=chrome)
+
     def _frame(self, left, right, term):
         w = max(72, min(term[0] - 2, 110))
-        rows_h = body_height(term[1], max(len(left), len(right)), len(left))
+        rows_h = self._body_rows(left, right, term)
         inner = w - 4
         left_w = self.left_width
         right_w = inner - left_w - 3            # " │ " between columns
@@ -248,9 +326,14 @@ class TwoPane:
             left_part = ""
         count = f"{Colors.MUTED}{n}{Colors.RESET}" if self.show_count else ""
         # cell() reserves a 2-col indicator gutter, so the usable width here is right_w - 2.
-        pad = right_w - 2 - visible_len(left_part) - visible_len(count)
-        two(hdr(self.left_header, self.focus == "left"),
-            f"{left_part}{' ' * max(1, pad)}{count}")
+        if count:
+            pad = right_w - 2 - visible_len(left_part) - visible_len(count)
+            header_right = f"{left_part}{' ' * max(1, pad)}{count}"
+        else:
+            # Nothing to push right, so add nothing: a trailing space here shunts
+            # the header one column off the rows it labels.
+            header_right = left_part
+        two(hdr(self.left_header, self.focus == "left"), header_right)
         lines.append(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
 
         end = min(n, self._scroll + rows_h)
@@ -296,7 +379,12 @@ class TwoPane:
                          f"{Colors.DIM}(type to filter the right){Colors.RESET}")
 
         out = sys.__stdout__ if sys.__stdout__ else sys.stdout
-        out.write("\033[H\033[J")
+        # Home the cursor and overwrite in place. Erasing the whole screen first
+        # blanks it for one frame, which reads as a flicker on every repaint --
+        # and a live screen repaints a lot. Each line below carries its own
+        # erase-to-end-of-line, and the trailing erase clears anything left over.
+        out.write("\033[H\033[J" if not self._painted else "\033[H")
+        self._painted = True
         print_header()
         out.write("\n".join(lines).replace("\n", "\033[K\n") + "\033[J\033[3J")
         out.flush()
@@ -305,11 +393,10 @@ class TwoPane:
         """Build the current rows and draw one frame (no input). Returns the
         (left, right) row lists used, for headless inspection."""
         left = self._left_rows()
-        self._left_cursor = max(0, min(self._left_cursor, len(left) - 1)) if left else 0
+        self._clamp_left(left)
         right = self._filtered_right(self._right_rows(self._active_left_value(left), self._query))
         term = shutil.get_terminal_size((80, 24))
-        rows_h = body_height(term[1], max(len(left), len(right)), len(left))
-        self._clamp(right, rows_h)
+        self._clamp(right, self._body_rows(left, right, term))
         self._frame(left, right, term)
         return left, right
 
@@ -327,20 +414,35 @@ class TwoPane:
 
     # --- loop ---
 
+    def _next_key(self):
+        """Block for a keypress, or poll so `update_callback` still runs while
+        nothing is typed. Returns None when the callback asked for a repaint;
+        a screen backed by live data would otherwise sit frozen on a blocking
+        read until the user happened to press something."""
+        if not self.update_callback:
+            return getch(return_special_keys=True)
+        while True:
+            key = getch_with_timeout(self.refresh_interval_ms, return_special_keys=True)
+            if key is not None:
+                return key
+            if self.update_callback(self):
+                return None
+
     def run(self):
         """Show the picker. Loops until Esc (returns None) or a hotkey callback
         returns ``"return"`` (returns that hotkey char)."""
         with cbreak_noecho():
             while True:
                 left = self._left_rows()
-                self._left_cursor = max(0, min(self._left_cursor, len(left) - 1)) if left else 0
+                self._clamp_left(left)
                 right = self._filtered_right(self._right_rows(self._active_left_value(left), self._query))
                 term = shutil.get_terminal_size((80, 24))
-                rows_h = body_height(term[1], max(len(left), len(right)), len(left))
-                self._clamp(right, rows_h)
+                self._clamp(right, self._body_rows(left, right, term))
                 self._frame(left, right, term)
 
-                key = getch(return_special_keys=True)
+                key = self._next_key()
+                if key is None:
+                    continue
                 if key == KEY_ESC:
                     return None
                 if key == KEY_TAB:
@@ -358,25 +460,35 @@ class TwoPane:
                 elif key == KEY_ENTER:
                     if self.focus == "left":
                         if self._on_left_enter:
-                            self._on_left_enter(self._active_left_value(left))
+                            out = self._on_left_enter(self._active_left_value(left))
+                            if out is not None:
+                                return out
                         if self.left_enter_focuses_right:
                             self.focus = "right"
                     elif self._cursor < len(right) and right[self._cursor][2]:
                         if self._on_right_enter:
-                            self._on_right_enter(right[self._cursor][1])
+                            out = self._on_right_enter(right[self._cursor][1])
+                            if out is not None:
+                                return out
                 elif key == KEY_BACKSPACE:
                     if self.focus == "right" and self.right_filterable:
                         self._query = self._query[:-1]
                         self._cursor = self._scroll = 0
                 elif key == KEY_SPACE:
-                    if self.focus == "right" and self.right_filterable:
+                    if self.focus == "right" and self.right_filterable and not self.space_activates:
                         self._query += " "
                         self._cursor = self._scroll = 0
-                    elif self.focus == "right" and not self.right_filterable:
+                    elif self.focus == "right":
                         if self._cursor < len(right) and right[self._cursor][2] and self._on_right_enter:
-                            self._on_right_enter(right[self._cursor][1])
-                    elif self.focus == "left" and self._on_left_enter:
-                        self._on_left_enter(self._active_left_value(left))
+                            out = self._on_right_enter(right[self._cursor][1])
+                            if out is not None:
+                                return out
+                    elif self.focus == "left":
+                        cb = self._on_left_space or self._on_left_enter
+                        if cb:
+                            out = cb(self._active_left_value(left))
+                            if out is not None:
+                                return out
                 elif isinstance(key, str) and len(key) == 1 and key.isprintable():
                     if key in self.keys:
                         if self.keys[key]() == "return":

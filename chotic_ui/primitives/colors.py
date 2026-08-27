@@ -18,6 +18,9 @@ _THEME_ORDER = [
     "gemini", "flame", "ocean", "synthwave", "forest", "frost", "sunset", "mono",
     "dracula", "nord", "gruvbox", "catppuccin",
     "rose-pine", "tokyo-night", "kanagawa", "everforest", "one-dark", "solarized",
+    # Fire family: one magenta -> red -> gold wordmark ramp, six sets of chrome.
+    "nova", "nova-rose", "nova-gold", "nova-ink", "nova-coal", "nova-crimson",
+    "ember", "magma", "solarflare", "charcoal",
 ]
 
 _THEME_ACCENTS = {
@@ -110,6 +113,64 @@ _THEME_ACCENTS = {
         "PRIMARY": (38, 139, 210),     # blue
         "SELECTION": (211, 54, 130),   # magenta
         "BORDER": (88, 110, 117),      # base01
+    },
+
+    # -- Fire family --
+    # All six share the "nova" wordmark ramp and differ only in chrome. BORDER
+    # draws every box edge, so it is the darkest value in each set: a frame at
+    # full saturation outshouts the cursor it exists to sit behind. Each set
+    # commits to ONE accent hue beside the neutral, because the failure mode
+    # here is three hues (plum frame, orange cursor, amber key) arguing.
+    "nova": {
+        "PRIMARY": (255, 196, 84),     # gold, from the ramp's tail
+        "SELECTION": (247, 60, 120),   # hot pink, from the ramp's head
+        "BORDER": (88, 62, 78),        # plum-grey
+    },
+    "nova-rose": {                     # magenta-locked, single hue
+        "PRIMARY": (255, 138, 190),    # pink
+        "SELECTION": (255, 74, 150),   # hot magenta
+        "BORDER": (120, 40, 84),       # deep rose
+    },
+    "nova-gold": {                     # bronze chrome, magenta cursor
+        "PRIMARY": (255, 200, 90),     # gold
+        "SELECTION": (247, 62, 140),   # magenta
+        "BORDER": (110, 84, 46),       # bronze
+    },
+    "nova-ink": {                      # cool neutral, highest contrast
+        "PRIMARY": (232, 232, 240),    # near-white
+        "SELECTION": (250, 66, 140),   # magenta
+        "BORDER": (72, 74, 88),        # slate
+    },
+    "nova-coal": {                     # warm charcoal, one accent
+        "PRIMARY": (214, 206, 202),    # warm grey
+        "SELECTION": (255, 82, 148),   # magenta
+        "BORDER": (58, 52, 56),        # charcoal
+    },
+    "nova-crimson": {                  # deep red chrome, gold keys
+        "PRIMARY": (255, 186, 92),     # gold
+        "SELECTION": (255, 92, 120),   # coral
+        "BORDER": (128, 34, 52),       # crimson
+    },
+
+    "ember": {
+        "PRIMARY": (255, 178, 60),
+        "SELECTION": (250, 110, 28),
+        "BORDER": (92, 74, 66),
+    },
+    "magma": {
+        "PRIMARY": (255, 170, 54),
+        "SELECTION": (246, 88, 22),
+        "BORDER": (108, 58, 44),
+    },
+    "solarflare": {
+        "PRIMARY": (255, 196, 80),
+        "SELECTION": (255, 104, 32),
+        "BORDER": (128, 60, 34),
+    },
+    "charcoal": {
+        "PRIMARY": (222, 212, 202),
+        "SELECTION": (255, 122, 40),
+        "BORDER": (62, 57, 55),
     },
 }
 
@@ -366,7 +427,75 @@ _THEME_GRADIENTS = {
         (108, 113, 196),  # Violet
         (70, 125, 205),   # Indigo-blue
     ],
+
+    # -- Fire family --
+    # These ramps do not open on a dark purple the way "sunset" does: at the
+    # left edge of a wordmark that stop reads as a bruise rather than a flame.
+    # Luminance climbs evenly so no stop muddies into brown halfway across.
+    "nova": [
+        (232, 58, 168),   # Hot pink
+        (238, 54, 146),   # Magenta
+        (242, 52, 122),   # Deep pink
+        (245, 54, 98),    # Rose
+        (247, 60, 74),    # Coral red
+        (249, 74, 56),    # Scarlet
+        (250, 94, 42),    # Red-orange
+        (252, 118, 36),   # Orange
+        (253, 146, 40),   # Warm orange
+        (254, 174, 54),   # Amber
+        (255, 202, 74),   # Golden amber
+        (255, 228, 112),  # Gold
+    ],
+    "ember": [
+        (196, 38, 138),   # Magenta
+        (212, 36, 116),   # Deep pink
+        (226, 38, 92),    # Rose red
+        (236, 42, 68),    # Red
+        (242, 52, 48),    # Scarlet
+        (246, 68, 34),    # Vermilion
+        (249, 90, 26),    # Red-orange
+        (251, 116, 26),   # Orange
+        (253, 144, 34),   # Warm orange
+        (254, 172, 48),   # Amber
+        (255, 198, 68),   # Golden amber
+        (255, 222, 104),  # Gold
+    ],
+    "magma": [
+        (150, 20, 60),    # Oxblood
+        (174, 22, 50),    # Deep crimson
+        (196, 26, 40),    # Crimson
+        (216, 34, 30),    # Blood red
+        (232, 48, 26),    # Red
+        (242, 68, 22),    # Red-orange
+        (248, 92, 20),    # Dark orange
+        (252, 118, 24),   # Orange
+        (254, 146, 32),   # Warm orange
+        (255, 174, 46),   # Amber
+        (255, 200, 66),   # Golden amber
+        (255, 224, 102),  # Gold
+    ],
+    "solarflare": [
+        (214, 32, 150),   # Magenta
+        (228, 30, 120),   # Deep pink
+        (238, 32, 88),    # Rose red
+        (244, 40, 58),    # Red
+        (248, 54, 36),    # Scarlet
+        (251, 76, 24),    # Vermilion
+        (253, 100, 18),   # Red-orange
+        (254, 126, 20),   # Orange
+        (255, 152, 30),   # Warm orange
+        (255, 180, 46),   # Amber
+        (255, 208, 70),   # Golden amber
+        (255, 236, 120),  # Bright gold
+    ],
 }
+
+# The nova chrome variants differ only in their accents, so they all draw the
+# same wordmark. Charcoal quiets the chrome, not the logo, so it borrows one too.
+for _variant in ("nova-rose", "nova-gold", "nova-ink", "nova-coal", "nova-crimson"):
+    _THEME_GRADIENTS[_variant] = list(_THEME_GRADIENTS["nova"])
+_THEME_GRADIENTS["charcoal"] = list(_THEME_GRADIENTS["ember"])
+del _variant
 
 
 # -- Active theme state --
@@ -376,6 +505,10 @@ _THEME_GRADIENTS = {
 THEME_SWITCHER_ENABLED = False
 
 _active_theme_idx = _THEME_ORDER.index("sunset")
+
+# Which themes the switcher walks. Apps narrow this with set_theme_cycle() so
+# a themed app cycles its own handful rather than all of the above.
+_cycle_order = list(_THEME_ORDER)
 
 GRADIENT_COLORS = list(_THEME_GRADIENTS[_THEME_ORDER[_active_theme_idx]])
 
@@ -424,11 +557,42 @@ def get_theme_name() -> str:
 
 
 def cycle_theme() -> str:
-    """Advance to next theme. Returns the new theme name."""
+    """Advance to the next theme in the cycle. Returns the new theme name."""
     global _active_theme_idx
-    _active_theme_idx = (_active_theme_idx + 1) % len(_THEME_ORDER)
+    current = get_theme_name()
+    # A theme set outside the cycle (or a cycle narrowed after the fact) has no
+    # position to advance from, so start the walk at the front of the list.
+    pos = _cycle_order.index(current) + 1 if current in _cycle_order else 0
+    _active_theme_idx = _THEME_ORDER.index(_cycle_order[pos % len(_cycle_order)])
     _apply_theme()
     return get_theme_name()
+
+
+def set_theme_cycle(names) -> None:
+    """Restrict cycle_theme() to `names`, in that order.
+
+    An app that ships a themed identity wants the switcher to walk its own
+    variants, not every theme in the registry. An empty sequence restores the
+    full list.
+    """
+    global _cycle_order
+    for name in names:
+        if name not in _THEME_ORDER:
+            raise ValueError(f"unknown theme {name!r}; choices: {', '.join(_THEME_ORDER)}")
+    _cycle_order = list(names) or list(_THEME_ORDER)
+
+
+def theme_switcher_enabled() -> bool:
+    """Read through a function so set_theme_switcher() actually takes effect;
+    widgets that imported the constant by value would never see the change."""
+    return THEME_SWITCHER_ENABLED
+
+
+def set_theme_switcher(enabled: bool) -> None:
+    """Let an app expose the theme-cycle hotkey without the library shipping it
+    on by default."""
+    global THEME_SWITCHER_ENABLED
+    THEME_SWITCHER_ENABLED = bool(enabled)
 
 
 def set_theme(name: str) -> str:

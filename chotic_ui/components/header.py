@@ -31,6 +31,16 @@ def invalidate_header_cache() -> None:
     _header_theme = None
 
 
+def header_height() -> int:
+    """Display rows print_header() occupies: a leading blank line, the art, the
+    version line, and a trailing blank. Callers size their own frames against
+    this rather than hardcoding a guess -- the art is per-app, and being wrong
+    here scrolls the banner off the top of the screen."""
+    if not _ascii_art:
+        return 0
+    return 1 + len(_ascii_art.split("\n")) + (1 if _version else 0) + 1
+
+
 def print_header() -> None:
     """Print the configured ASCII header with a diagonal gradient and version."""
     global _header_cache, _header_theme

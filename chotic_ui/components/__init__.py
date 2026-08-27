@@ -18,6 +18,7 @@ from .box import (
 from .header import (
     configure_header,
     print_header,
+    header_height,
     invalidate_header_cache,
 )
 from .formatting import (
@@ -39,6 +40,7 @@ __all__ = [
     # Header
     "configure_header",
     "print_header",
+    "header_height",
     "invalidate_header_cache",
     # Formatting
     "strip_ansi",

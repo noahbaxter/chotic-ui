@@ -55,6 +55,9 @@ from .colors import (
     cycle_theme,
     set_theme,
     THEME_SWITCHER_ENABLED,
+    theme_switcher_enabled,
+    set_theme_switcher,
+    set_theme_cycle,
 )
 from .host import (
     enable_windows_vt,
@@ -110,6 +113,9 @@ __all__ = [
     "get_gradient_color",
     "get_theme_name",
     "cycle_theme",
+    "set_theme_cycle",
+    "theme_switcher_enabled",
+    "set_theme_switcher",
     "set_theme",
     # Native host
     "enable_windows_vt",
