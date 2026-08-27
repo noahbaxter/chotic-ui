@@ -18,7 +18,7 @@ from ..primitives import (
     cbreak_noecho,
     Colors,
     cycle_theme,
-    THEME_SWITCHER_ENABLED,
+    theme_switcher_enabled,
     KEY_UP,
     KEY_DOWN,
     KEY_LEFT,
@@ -511,7 +511,7 @@ class Menu:
                 hint += f"  {Colors.PRIMARY}Space{Colors.MUTED} {self.space_hint}"
             if self.filterable and not self._filter_mode:
                 hint += f"  {Colors.PRIMARY}/{Colors.MUTED} Filter"
-            if THEME_SWITCHER_ENABLED and not self._filter_mode:
+            if theme_switcher_enabled() and not self._filter_mode:
                 hint += f"  {Colors.PRIMARY}T{Colors.MUTED} Theme"
             esc_label = "Exit filter" if (self.filterable and self._filter_mode) else self.esc_label
             hint += f"  {Colors.PRIMARY}Esc{Colors.MUTED} {esc_label}{Colors.RESET}"
@@ -716,7 +716,7 @@ class Menu:
                     self._filter_mode = True
                     self._render()
 
-                elif THEME_SWITCHER_ENABLED and isinstance(key, str) and len(key) == 1 and key.upper() == 'T':
+                elif theme_switcher_enabled() and isinstance(key, str) and len(key) == 1 and key.upper() == 'T':
                     cycle_theme()
                     invalidate_header_cache()
                     if self.rebuild:
