@@ -6,6 +6,7 @@ platform: the Windows-only ctypes calls live behind an os.name guard and are
 imported lazily.
 """
 
+import atexit
 import os
 import sys
 
@@ -58,3 +59,62 @@ def bootstrap(title: str | None = None) -> None:
     enable_windows_vt()
     if title and sys.stdout.isatty():
         set_window_title(title)
+
+
+_alt_screen = False
+
+
+def _raw_out():
+    """The real console, bypassing any stdout wrapper (log tees and the like)."""
+    return sys.__stdout__ if sys.__stdout__ else sys.stdout
+
+
+def enter_alt_screen() -> bool:
+    """Switch the terminal to its alternate screen buffer.
+
+    The alternate buffer has no scrollback, so a frame can never scroll off the
+    top and a window resize can never pull old content back into view under a
+    repaint. It also means the shell the app was launched from comes back
+    untouched on exit. No-op (returns False) when stdout is not a terminal or
+    the buffer is already active.
+    """
+    global _alt_screen
+    out = _raw_out()
+    if _alt_screen or not (out and out.isatty()):
+        return False
+    out.write("\033[?1049h\033[H\033[2J")
+    out.flush()
+    _alt_screen = True
+    return True
+
+
+def leave_alt_screen() -> None:
+    """Return to the primary screen buffer. Safe to call when not in one."""
+    global _alt_screen
+    if not _alt_screen:
+        return
+    _alt_screen = False
+    out = _raw_out()
+    out.write("\033[?1049l")
+    out.flush()
+
+
+def use_alt_screen() -> bool:
+    """Enter the alternate screen and guarantee the app leaves it again.
+
+    A process that dies inside the alternate buffer strands the user looking at
+    a frozen frame, so the exit path is wired up here rather than left to the
+    caller: atexit covers a normal return and sys.exit, and the excepthook runs
+    before the traceback so the traceback lands somewhere visible.
+    """
+    if not enter_alt_screen():
+        return False
+    atexit.register(leave_alt_screen)
+    previous = sys.excepthook
+
+    def hook(exc_type, exc, tb):
+        leave_alt_screen()
+        previous(exc_type, exc, tb)
+
+    sys.excepthook = hook
+    return True

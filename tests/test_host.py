@@ -1,6 +1,8 @@
 import os
 import sys
 
+import pytest
+
 from chotic_ui.primitives import host
 
 
@@ -42,3 +44,79 @@ def test_shims_exported_at_top_level():
     assert callable(chotic_ui.bootstrap)
     assert callable(chotic_ui.set_window_title)
     assert callable(chotic_ui.enable_windows_vt)
+
+
+class FakeConsole:
+    def __init__(self, tty=True):
+        self.written = []
+        self._tty = tty
+
+    def write(self, text):
+        self.written.append(text)
+
+    def flush(self):
+        pass
+
+    def isatty(self):
+        return self._tty
+
+    def text(self):
+        return "".join(self.written)
+
+
+@pytest.fixture
+def console(monkeypatch):
+    """A fake console in place of the real one, with the alt-screen flag reset
+    around the test so one leaving it dirty cannot skew the next."""
+    fake = FakeConsole()
+    monkeypatch.setattr("sys.__stdout__", fake)
+    monkeypatch.setattr(host, "_alt_screen", False)
+    yield fake
+    host._alt_screen = False
+
+
+def test_enter_alt_screen_switches_and_clears(console):
+    assert host.enter_alt_screen() is True
+    assert console.text() == "\x1b[?1049h\x1b[H\x1b[2J"
+
+
+def test_enter_alt_screen_is_idempotent(console):
+    host.enter_alt_screen()
+    assert host.enter_alt_screen() is False
+    assert console.text().count("\x1b[?1049h") == 1
+
+
+def test_leave_alt_screen_restores_the_primary_buffer(console):
+    host.enter_alt_screen()
+    host.leave_alt_screen()
+    host.leave_alt_screen()
+    assert console.text().endswith("\x1b[?1049l")
+    assert console.text().count("\x1b[?1049l") == 1
+
+
+def test_leave_alt_screen_without_entering_writes_nothing(console):
+    host.leave_alt_screen()
+    assert console.text() == ""
+
+
+def test_alt_screen_is_a_noop_when_not_a_tty(monkeypatch):
+    fake = FakeConsole(tty=False)
+    monkeypatch.setattr("sys.__stdout__", fake)
+    monkeypatch.setattr(host, "_alt_screen", False)
+    assert host.use_alt_screen() is False
+    assert fake.text() == ""
+
+
+def test_excepthook_leaves_the_buffer_before_the_traceback(console, monkeypatch):
+    """A traceback printed inside the alternate buffer is thrown away with it,
+    so the process would die with nothing on screen to explain why."""
+    order = []
+    monkeypatch.setattr(sys, "excepthook", lambda *a: order.append("traceback"))
+    assert host.use_alt_screen() is True
+    console.written.clear()
+
+    sys.excepthook(RuntimeError, RuntimeError("boom"), None)
+
+    assert console.text() == "\x1b[?1049l"
+    assert order == ["traceback"]
+    assert host._alt_screen is False

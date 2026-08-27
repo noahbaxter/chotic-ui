@@ -63,6 +63,9 @@ from .host import (
     enable_windows_vt,
     set_window_title,
     bootstrap,
+    enter_alt_screen,
+    leave_alt_screen,
+    use_alt_screen,
 )
 
 __all__ = [
@@ -121,4 +124,7 @@ __all__ = [
     "enable_windows_vt",
     "set_window_title",
     "bootstrap",
+    "enter_alt_screen",
+    "leave_alt_screen",
+    "use_alt_screen",
 ]
