@@ -32,7 +32,54 @@ from ..primitives import (
     KEY_TAB,
     KEY_BACKSPACE,
 )
+import re as _re
+
 from ..primitives.terminal import truncate_ansi
+
+# A colour code through to its reset. Kept whole when wrapping: a phrase that
+# is coloured because it is the warning reads worst half in and half out of it.
+_COLOURED_RUN = _re.compile(r"\x1b\[[0-9;]*m.*?\x1b\[0m")
+
+
+def _wrap_ansi_line(text: str, width: int) -> list:
+    """Wrap one line on visible width, leaving colour runs intact.
+
+    A run is grown out to the surrounding whitespace before it is treated as
+    one token, so punctuation that follows it stays attached: splitting there
+    rejoined with a space and printed "WILL BE DELETED ." instead.
+    """
+    spans = []
+    for match in _COLOURED_RUN.finditer(text):
+        start, end = match.start(), match.end()
+        while start > 0 and not text[start - 1].isspace():
+            start -= 1
+        while end < len(text) and not text[end].isspace():
+            end += 1
+        if spans and start <= spans[-1][1]:
+            spans[-1] = (spans[-1][0], max(end, spans[-1][1]))
+        else:
+            spans.append((start, end))
+
+    tokens = []
+    pos = 0
+    for start, end in spans:
+        tokens.extend(text[pos:start].split())
+        tokens.append(text[start:end])
+        pos = end
+    tokens.extend(text[pos:].split())
+
+    lines, current, length = [], [], 0
+    for token in tokens:
+        size = len(strip_ansi(token))
+        if current and length + 1 + size > width:
+            lines.append(" ".join(current))
+            current, length = [token], size
+        else:
+            length += size + (1 if current else 0)
+            current.append(token)
+    if current:
+        lines.append(" ".join(current))
+    return lines
 from ..components import (
     box_row,
     strip_ansi,
@@ -346,8 +393,22 @@ class Menu:
             out.extend(textwrap.wrap(line, max(width, 8)) or [""])
         return out or [""]
 
+    def _wrap_coloured(self, text: str, width: int) -> list[str]:
+        """Wrap to visible width, keeping colour.
+
+        Measured on what is on screen rather than on the bytes, and a coloured
+        run is never broken across lines: a phrase that is coloured because it
+        is the warning reads worst of all half in and half out of it.
+        """
+        if not text:
+            return []
+        out = []
+        for line in text.split("\n"):
+            out.extend(_wrap_ansi_line(line, max(width, 8)) or [""])
+        return out or [""]
+
     def _subtitle_lines(self, w: int) -> list[str]:
-        return self._wrap(self.subtitle, w - 4)
+        return self._wrap_coloured(self.subtitle, w - 4)
 
     def _detail_lines(self, w: int) -> list[str]:
         """Wrapped description of the selected item, padded to a fixed height.
@@ -506,9 +567,14 @@ class Menu:
                 left = pad // 2
                 print(f"{c}{BOX_V}{Colors.RESET} {' ' * left}{Colors.BOLD}{self.title}{Colors.RESET}{' ' * (pad - left)} {c}{BOX_V}{Colors.RESET}")
                 for sub_line in self._subtitle_lines(w):
-                    sub_pad = w - 4 - len(sub_line)
+                    # Padded on what shows, not on the bytes, or a coloured
+                    # phrase pushes the right border off the box. A reset
+                    # inside the line returns to muted rather than to plain,
+                    # so the rest of the sentence still reads as subtitle.
+                    sub_pad = w - 4 - len(strip_ansi(sub_line))
                     sub_left = sub_pad // 2
-                    print(f"{c}{BOX_V}{Colors.RESET} {' ' * sub_left}{Colors.MUTED}{sub_line}{Colors.RESET}{' ' * (sub_pad - sub_left)} {c}{BOX_V}{Colors.RESET}")
+                    body = sub_line.replace(Colors.RESET, Colors.RESET + Colors.MUTED)
+                    print(f"{c}{BOX_V}{Colors.RESET} {' ' * sub_left}{Colors.MUTED}{body}{Colors.RESET}{' ' * (sub_pad - sub_left)} {c}{BOX_V}{Colors.RESET}")
                 print(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
 
             # Column header (right-aligned, after title divider)
