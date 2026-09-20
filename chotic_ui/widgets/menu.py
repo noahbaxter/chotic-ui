@@ -333,10 +333,18 @@ class Menu:
         self._selected = selectable[pos]
 
     def _wrap(self, text: str, width: int) -> list[str]:
-        """Wrap plain text to width, never returning zero lines."""
+        """Wrap plain text to width, never returning zero lines.
+
+        Line breaks in the source are kept. A caller with something structured
+        to say, such as a list of what is about to be deleted, otherwise gets
+        it flattened into one paragraph, which is the shape people skim past.
+        """
         if not text:
             return []
-        return textwrap.wrap(strip_ansi(text), max(width, 8)) or [""]
+        out = []
+        for line in strip_ansi(text).split("\n"):
+            out.extend(textwrap.wrap(line, max(width, 8)) or [""])
+        return out or [""]
 
     def _subtitle_lines(self, w: int) -> list[str]:
         return self._wrap(self.subtitle, w - 4)
