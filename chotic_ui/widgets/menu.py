@@ -567,14 +567,17 @@ class Menu:
                 left = pad // 2
                 print(f"{c}{BOX_V}{Colors.RESET} {' ' * left}{Colors.BOLD}{self.title}{Colors.RESET}{' ' * (pad - left)} {c}{BOX_V}{Colors.RESET}")
                 for sub_line in self._subtitle_lines(w):
+                    # Left aligned, because a subtitle is prose: centring it
+                    # gives every line a different left edge and the eye has
+                    # to find the start of each one.
+                    #
                     # Padded on what shows, not on the bytes, or a coloured
                     # phrase pushes the right border off the box. A reset
                     # inside the line returns to muted rather than to plain,
                     # so the rest of the sentence still reads as subtitle.
                     sub_pad = w - 4 - len(strip_ansi(sub_line))
-                    sub_left = sub_pad // 2
                     body = sub_line.replace(Colors.RESET, Colors.RESET + Colors.MUTED)
-                    print(f"{c}{BOX_V}{Colors.RESET} {' ' * sub_left}{Colors.MUTED}{body}{Colors.RESET}{' ' * (sub_pad - sub_left)} {c}{BOX_V}{Colors.RESET}")
+                    print(f"{c}{BOX_V}{Colors.RESET} {Colors.MUTED}{body}{Colors.RESET}{' ' * sub_pad} {c}{BOX_V}{Colors.RESET}")
                 print(box_row(BOX_TL_DIV, BOX_H, BOX_TR_DIV, w, c))
 
             # Column header (right-aligned, after title divider)
