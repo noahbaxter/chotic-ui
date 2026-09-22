@@ -132,6 +132,12 @@ class MenuItem:
     locked: bool = False  # Truly non-interactive (blocks all input, unlike disabled which is visual-only)
     show_toggle: bool | None = None
     pinned: bool = False
+    # A row you type into. Arrows still move between rows; while this one is
+    # selected, printable keys edit `text` and Enter submits it. Lets one list
+    # offer "open the picker" and "type it yourself" without a second screen.
+    editable: bool = False
+    text: str = ""
+    placeholder: str = ""
 
     def __post_init__(self):
         if self.value is None:
@@ -464,6 +470,17 @@ class Menu:
                 toggle_len = 0
 
             label_text = item.label
+            if getattr(item, "editable", False):
+                # Cursor only on the selected row, so the list never looks
+                # like two things are being typed into at once.
+                typed = item.text or ""
+                if typed:
+                    body = f"{typed}{Colors.PRIMARY}▏{Colors.RESET}" if selected else typed
+                elif selected:
+                    body = f"{Colors.PRIMARY}▏{Colors.RESET}{Colors.MUTED_DIM}{item.placeholder}{Colors.RESET}"
+                else:
+                    body = f"{Colors.MUTED_DIM}{item.placeholder}{Colors.RESET}"
+                label_text = f"{item.label}{body}"
             label_visible_len = len(strip_ansi(label_text))
 
             # Build left side (selector + toggle + hotkey + label)
@@ -763,6 +780,26 @@ class Menu:
                             result = self.update_callback(self)
                             if result == "rebuild":
                                 return MenuResult(self.items[self._selected], "rebuild")
+
+                # An editable row swallows typing, so Space is a space and B
+                # is the letter B rather than a hotkey. Navigation, Enter and
+                # Esc still belong to the menu.
+                editing = self.items[self._selected] if self._selected < len(self.items) else None
+                if getattr(editing, "editable", False):
+                    if key == KEY_BACKSPACE:
+                        editing.text = editing.text[:-1]
+                        self._render()
+                        continue
+                    if key == KEY_SPACE:
+                        # Paths have spaces in them, and every library on a
+                        # Mac lives under one.
+                        editing.text += " "
+                        self._render()
+                        continue
+                    if isinstance(key, str) and len(key) == 1 and key.isprintable():
+                        editing.text += key
+                        self._render()
+                        continue
 
                 if key == KEY_ESC:
                     if self.filterable and self._filter_mode:
