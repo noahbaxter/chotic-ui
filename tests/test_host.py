@@ -94,6 +94,32 @@ def test_leave_alt_screen_restores_the_primary_buffer(console):
     assert console.text().count("\x1b[?1049l") == 1
 
 
+@pytest.mark.skipif(os.name == "nt", reason="the Windows console does not echo keys")
+def test_keys_are_not_echoed_while_the_app_owns_the_screen(console, monkeypatch):
+    """A key pressed between two screens, while nothing reads the keyboard,
+    was echoed over the frame as ^[[B."""
+    import pty
+    import termios
+
+    master, slave = pty.openpty()
+    stdin = os.fdopen(slave, "r")
+    monkeypatch.setattr("sys.stdin", stdin)
+    monkeypatch.setattr(host, "_saved_tty", None)
+
+    def echoing():
+        return bool(termios.tcgetattr(slave)[3] & termios.ECHO)
+
+    try:
+        assert echoing()
+        host.enter_alt_screen()
+        assert not echoing()
+        host.leave_alt_screen()
+        assert echoing()
+    finally:
+        stdin.close()
+        os.close(master)
+
+
 def test_leave_alt_screen_without_entering_writes_nothing(console):
     host.leave_alt_screen()
     assert console.text() == ""

@@ -62,6 +62,43 @@ def bootstrap(title: str | None = None) -> None:
 
 
 _alt_screen = False
+_saved_tty = None  # terminal settings from before echo was turned off
+
+
+def _echo_off() -> None:
+    """Stop the terminal echoing keys while the app owns the screen.
+
+    Between two screens nothing reads the keyboard, so an arrow pressed during
+    a slow step was echoed as ^[[B over the frame. Widgets that switch modes
+    restore what they found, which is now this. Anything that shows typed text
+    draws it itself (input_with_esc reads with echo off already).
+    """
+    global _saved_tty
+    if os.name == "nt":
+        return
+    try:
+        import termios
+        fd = sys.stdin.fileno()
+        if not os.isatty(fd):
+            return
+        _saved_tty = termios.tcgetattr(fd)
+        quiet = termios.tcgetattr(fd)
+        quiet[3] &= ~termios.ECHO
+        termios.tcsetattr(fd, termios.TCSANOW, quiet)
+    except (OSError, ValueError, AttributeError):
+        _saved_tty = None
+
+
+def _echo_restore() -> None:
+    global _saved_tty
+    if _saved_tty is None:
+        return
+    try:
+        import termios
+        termios.tcsetattr(sys.stdin.fileno(), termios.TCSANOW, _saved_tty)
+    except (OSError, ValueError, AttributeError):
+        pass
+    _saved_tty = None
 
 
 def _raw_out():
@@ -85,6 +122,7 @@ def enter_alt_screen() -> bool:
     out.write("\033[?1049h\033[H\033[2J")
     out.flush()
     _alt_screen = True
+    _echo_off()
     return True
 
 
@@ -94,6 +132,7 @@ def leave_alt_screen() -> None:
     if not _alt_screen:
         return
     _alt_screen = False
+    _echo_restore()
     out = _raw_out()
     out.write("\033[?1049l")
     out.flush()
