@@ -82,6 +82,19 @@ def test_a_detail_alone_still_gets_its_line_counted():
     assert any("library" in row for row in rows)
 
 
+def test_the_text_is_what_gets_printed_and_as_tall_as_it_says():
+    """A screen that draws itself puts the banner back from header_text() and
+    sizes its frame by header_height(); the two have to agree with print_header."""
+    from chotic_ui.components.header import header_text
+    configure_header(BANNER, "1.2.3", detail=lambda room: "library → ~/Songs")
+
+    out = io.StringIO()
+    with redirect_stdout(out):
+        print_header()
+    assert header_text() == out.getvalue()
+    assert header_text().count("\n") == header_height()
+
+
 def test_without_a_detail_nothing_changes():
     configure_header(BANNER, "1.2.3")
 

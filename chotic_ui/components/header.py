@@ -59,10 +59,17 @@ def _has_status_line() -> bool:
 
 def print_header() -> None:
     """Print the configured ASCII header with a diagonal gradient and version."""
+    print(header_text(), end="")
+
+
+def header_text() -> str:
+    """The header exactly as print_header() writes it: header_height() rows,
+    ending in a newline. "" if never configured. For a screen that draws
+    itself and has to put the banner back after clearing."""
     global _header_cache, _header_theme
 
     if not _ascii_art:
-        return
+        return ""
 
     current_theme = get_theme_name()
     if _header_cache is None or _header_theme != current_theme:
@@ -92,7 +99,7 @@ def print_header() -> None:
     if _has_status_line():
         lines.append(_status_line(current_theme) + ERASE_EOL)
     lines.append(ERASE_EOL)
-    print(f"{ERASE_EOL}\n" + "\n".join(lines))
+    return f"{ERASE_EOL}\n" + "\n".join(lines) + "\n"
 
 
 def _status_line(theme: str) -> str:
