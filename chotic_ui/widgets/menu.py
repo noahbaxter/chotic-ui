@@ -677,8 +677,12 @@ class Menu:
 
         # Write cursor-home + content + clear-rest + clear-scrollback as one atomic write
         # \033[K on each line clears trailing old content that the new line doesn't cover
+        # Clipped to the window, as TwoPane does: a wrapped line is a row the
+        # height maths never counted, and the repaint scrolls to make room.
         out = sys.__stdout__ if sys.__stdout__ else sys.stdout
-        content = buf.getvalue().replace('\n', '\033[K\n')
+        cols = shutil.get_terminal_size().columns
+        rows = [truncate_ansi(line, cols) for line in buf.getvalue().split('\n')]
+        content = '\033[K\n'.join(rows)
         out.write(f"\033[H{content}\033[J\033[3J")
         out.flush()
 

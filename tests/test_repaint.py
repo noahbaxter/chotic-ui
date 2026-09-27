@@ -53,6 +53,8 @@ def paint(widget, screen, monkeypatch):
     """Render one frame at the screen's current size and replay it."""
     size = os.terminal_size((screen.cols, screen.rows))
     monkeypatch.setattr(shutil, "get_terminal_size", lambda fallback=(80, 24): size)
+    monkeypatch.setattr("chotic_ui.primitives.terminal.get_terminal_width",
+                        lambda: screen.cols)
     written = []
     sink = _Sink(written)
     monkeypatch.setattr("sys.stdout", sink)
@@ -124,3 +126,17 @@ def test_frame_fits_the_window(banner, monkeypatch):
         paint(widget, screen, monkeypatch)
         assert screen.lines()[0] == "", "banner should start at the top, unscrolled"
         assert "Tab panes" in screen.lines()[rows - 1]
+
+
+def test_a_window_narrower_than_the_frame_does_not_scroll(banner, monkeypatch):
+    """The box has a minimum width, so a narrow window wrapped its lines into
+    rows the height maths never counted. Every repaint then scrolled the banner
+    off the top, which reads as the logo flickering."""
+    widget = pane()
+    for cols in (60, 20):
+        screen = Screen(cols, SHORT)
+        paint(widget, screen, monkeypatch)
+        paint(widget, screen, monkeypatch)
+        assert screen.lines()[0] == "", f"scrolled at {cols} columns"
+        assert "Tab panes" in screen.lines()[SHORT - 1]
+    assert "#" not in screen.text(), "a banner wider than the window is left out"

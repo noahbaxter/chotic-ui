@@ -6,7 +6,8 @@ it. Asserting on the escape sequence a widget emits cannot see that; only
 replaying it onto a grid can.
 
 Understands the subset the widgets actually emit: cursor home, erase to end of
-line, erase to end of screen, and printable text. Colour codes are dropped.
+line, erase to end of screen, and printable text, wrapping at the right edge.
+Colour codes are dropped.
 """
 
 import re
@@ -52,18 +53,24 @@ class Screen:
             char = stream[i]
             i += 1
             if char == "\n":
-                self.row += 1
-                self.col = 0
-                if self.row >= self.rows:
-                    self.grid.pop(0)
-                    self.grid.append([" "] * self.cols)
-                    self.row = self.rows - 1
+                self._newline()
             elif char == "\r":
                 self.col = 0
             else:
-                if self.col < self.cols:
-                    self.grid[self.row][self.col] = char
+                # Deferred wrap, as terminals do it: filling the last column is
+                # fine, the next printable character is what moves down a row.
+                if self.col >= self.cols:
+                    self._newline()
+                self.grid[self.row][self.col] = char
                 self.col += 1
+
+    def _newline(self):
+        self.row += 1
+        self.col = 0
+        if self.row >= self.rows:
+            self.grid.pop(0)
+            self.grid.append([" "] * self.cols)
+            self.row = self.rows - 1
 
     def _escape(self, arg, cmd):
         if cmd == "H":

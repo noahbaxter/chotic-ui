@@ -50,11 +50,20 @@ def header_height() -> int:
     here scrolls the banner off the top of the screen."""
     if not _ascii_art:
         return 0
-    return 1 + len(_ascii_art.split("\n")) + (1 if _has_status_line() else 0) + 1
+    art = len(_ascii_art.split("\n")) if _art_fits() else 0
+    return 1 + art + (1 if _has_status_line() else 0) + 1
 
 
 def _has_status_line() -> bool:
     return bool(_version or _detail)
+
+
+def _art_fits() -> bool:
+    """Whether the art fits the window unwrapped. A wrapped banner takes more
+    rows than header_height() says, and a screen repainting under it scrolls
+    the banner off on every frame."""
+    widest = max(len(line) for line in _ascii_art.split("\n"))
+    return widest <= terminal.get_terminal_width()
 
 
 def print_header() -> None:
@@ -95,7 +104,7 @@ def header_text() -> str:
         # leaves the previous frame's text sitting to the right of it.
         _header_cache = "\n".join(line + ERASE_EOL for line in cached_lines)
 
-    lines = [_header_cache]
+    lines = [_header_cache] if _art_fits() else []
     if _has_status_line():
         lines.append(_status_line(current_theme) + ERASE_EOL)
     lines.append(ERASE_EOL)

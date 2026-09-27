@@ -386,7 +386,11 @@ class TwoPane:
         out.write("\033[H\033[J" if not self._painted else "\033[H")
         self._painted = True
         print_header()
-        out.write("\n".join(lines).replace("\n", "\033[K\n") + "\033[J\033[3J")
+        # The box has a minimum width, and a line that wraps adds a row the
+        # height maths never counted, so a window narrower than the box would
+        # scroll on every repaint. Clip instead: the right edge goes, nothing moves.
+        rows = [truncate_ansi(line, term[0]) for line in "\n".join(lines).split("\n")]
+        out.write("\033[K\n".join(rows) + "\033[J\033[3J")
         out.flush()
 
     def render_once(self):
@@ -418,14 +422,21 @@ class TwoPane:
         """Block for a keypress, or poll so `update_callback` still runs while
         nothing is typed. Returns None when the callback asked for a repaint;
         a screen backed by live data would otherwise sit frozen on a blocking
-        read until the user happened to press something."""
+        read until the user happened to press something.
+
+        A resize repaints too. A narrower window clips the old frame on its
+        own, but a wider one leaves it sitting at the old width. Polled rather
+        than SIGWINCH, which Windows does not have."""
         if not self.update_callback:
             return getch(return_special_keys=True)
+        size = shutil.get_terminal_size((80, 24))
         while True:
             key = getch_with_timeout(self.refresh_interval_ms, return_special_keys=True)
             if key is not None:
                 return key
             if self.update_callback(self):
+                return None
+            if shutil.get_terminal_size((80, 24)) != size:
                 return None
 
     def run(self):
