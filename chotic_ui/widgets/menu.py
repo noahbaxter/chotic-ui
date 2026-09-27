@@ -34,6 +34,7 @@ from ..primitives import (
 )
 import re as _re
 
+from ..primitives import notices
 from ..primitives.terminal import truncate_ansi
 
 # A colour code through to its reset. Kept whole when wrapping: a phrase that
@@ -83,7 +84,9 @@ def _wrap_ansi_line(text: str, width: int) -> list:
 from ..components import (
     box_row,
     strip_ansi,
-    print_header,
+    header_text,
+    notice_text,
+    notice_rows,
     invalidate_header_cache,
     BOX_TL,
     BOX_TR,
@@ -269,10 +272,15 @@ class Menu:
                 scrollable.append((i, item))
         return scrollable, pinned
 
+    def _unread(self) -> list:
+        """The notices run() took when this menu opened. None before it has."""
+        return getattr(self, "_notices", [])
+
     def _base_visible_capacity(self) -> int:
         """Calculate base capacity for scrollable items (without scroll indicators)."""
         term_height = shutil.get_terminal_size().lines
         fixed_lines = 8 + 4 + 1 + 1  # Header + box + hint + buffer
+        fixed_lines += notice_rows(self._unread())
         w = self._width()
         if self.subtitle:
             fixed_lines += len(self._subtitle_lines(w))
@@ -561,7 +569,7 @@ class Menu:
         old_stdout = sys.stdout
         sys.stdout = buf
         try:
-            print_header()
+            print(header_text() + notice_text(self._unread()), end="")
 
             w = self._width()
             c = Colors.BORDER
@@ -736,6 +744,9 @@ class Menu:
         else:
             self._selected = selectable[0]
 
+        # Whatever was printed before this menu opened, shown in it rather
+        # than drawn over. Taken before the scroll maths, which counts it.
+        self._notices = notices.take()
         self._scroll_offset = 0
         self._adjust_scroll()
 

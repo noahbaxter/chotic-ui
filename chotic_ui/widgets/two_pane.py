@@ -27,8 +27,9 @@ from ..primitives import (
     KEY_UP, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_TAB, KEY_BACKSPACE, KEY_SPACE,
 )
 from ..primitives.terminal import strip_ansi, visible_len, pad_to, truncate_ansi
+from ..primitives import notices
 from ..components import (
-    print_header, header_height, box_row,
+    header_text, header_height, notice_text, notice_rows, box_row,
     BOX_TL, BOX_TR, BOX_BL, BOX_BR, BOX_H, BOX_V, BOX_TL_DIV, BOX_TR_DIV,
 )
 
@@ -178,6 +179,10 @@ class TwoPane:
         # Clearing every time flickers, never clearing leaves whatever the
         # screen we just came back from left behind.
         self._painted = False
+        # Printed lines nobody has read, shown under the banner while this
+        # screen is up. Topped up every frame: a background thread can print
+        # while the screen is live.
+        self._notices = []
 
         self.focus = "left"
         self._left_cursor = 0
@@ -242,8 +247,14 @@ class TwoPane:
 
     def _chrome_lines(self) -> int:
         """Everything the frame draws that is not a body row."""
-        return (header_height() + BOX_LINES + self.footer_lines
-                + (1 if self._detail else 0))
+        return (header_height() + notice_rows(self._notices) + BOX_LINES
+                + self.footer_lines + (1 if self._detail else 0))
+
+    def _collect_notices(self):
+        """Take anything printed since the last frame, keeping the newest."""
+        new = notices.take()
+        if new:
+            self._notices = (self._notices + new)[-notices.MAX_LINES:]
 
     def _body_rows(self, left, right, term):
         chrome = self._chrome_lines()
@@ -385,7 +396,7 @@ class TwoPane:
         # erase-to-end-of-line, and the trailing erase clears anything left over.
         out.write("\033[H\033[J" if not self._painted else "\033[H")
         self._painted = True
-        print_header()
+        out.write(header_text() + notice_text(self._notices))
         # The box has a minimum width, and a line that wraps adds a row the
         # height maths never counted, so a window narrower than the box would
         # scroll on every repaint. Clip instead: the right edge goes, nothing moves.
@@ -396,6 +407,7 @@ class TwoPane:
     def render_once(self):
         """Build the current rows and draw one frame (no input). Returns the
         (left, right) row lists used, for headless inspection."""
+        self._collect_notices()
         left = self._left_rows()
         self._clamp_left(left)
         right = self._filtered_right(self._right_rows(self._active_left_value(left), self._query))
@@ -436,7 +448,7 @@ class TwoPane:
                 return key
             if self.update_callback(self):
                 return None
-            if shutil.get_terminal_size((80, 24)) != size:
+            if shutil.get_terminal_size((80, 24)) != size or notices.pending():
                 return None
 
     def run(self):
@@ -444,6 +456,7 @@ class TwoPane:
         returns ``"return"`` (returns that hotkey char)."""
         with cbreak_noecho():
             while True:
+                self._collect_notices()
                 left = self._left_rows()
                 self._clamp_left(left)
                 right = self._filtered_right(self._right_rows(self._active_left_value(left), self._query))

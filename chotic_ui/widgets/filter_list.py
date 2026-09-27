@@ -15,8 +15,9 @@ from ..primitives import (
     KEY_UP, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_BACKSPACE, KEY_SPACE,
 )
 from ..primitives.terminal import strip_ansi, get_terminal_width, visible_len, truncate_ansi
+from ..primitives import notices
 from ..components import (
-    print_header, box_row,
+    header_text, notice_text, notice_rows, box_row,
     BOX_TL, BOX_TR, BOX_BL, BOX_BR, BOX_H, BOX_V, BOX_TL_DIV, BOX_TR_DIV,
 )
 
@@ -44,6 +45,7 @@ class FilterList:
         self._query = ""
         self._cursor = 0
         self._scroll = 0
+        self._notices = []  # taken by run(): printed lines nobody has read
 
     def _matches(self):
         q = self._query.lower().strip()
@@ -71,7 +73,7 @@ class FilterList:
         if self.page_size is not None:
             return self.page_size
         rows = shutil.get_terminal_size((80, 24)).lines
-        return max(6, rows - 16)
+        return max(6, rows - 16 - notice_rows(self._notices))
 
     def _render(self, matches):
         w = self._width()
@@ -126,7 +128,7 @@ class FilterList:
         out = sys.__stdout__ if sys.__stdout__ else sys.stdout
         # header rendered separately (it manages its own caching/print)
         out.write("\033[H\033[J")
-        print_header()
+        out.write(header_text() + notice_text(self._notices))
         content = "\n".join(lines).replace("\n", "\033[K\n")
         out.write(content + "\033[J\033[3J")
         out.flush()
@@ -140,6 +142,7 @@ class FilterList:
 
     def run(self):
         """Show the list. Returns the chosen value, or None if cancelled."""
+        self._notices = notices.take()
         with cbreak_noecho():
             while True:
                 matches = self._matches()

@@ -7,7 +7,10 @@ Provides ESC-aware input functions for better UX.
 import sys
 import os
 import time
+import functools
 from contextlib import contextmanager
+
+from . import notices
 
 # Platform-specific imports
 if os.name == 'nt':
@@ -22,6 +25,18 @@ else:
 class CancelInput(Exception):
     """Raised when user cancels input with ESC."""
     pass
+
+
+def _marks_read(wait):
+    """A wait held the screen still, so what was printed on it has been seen:
+    the next screen need not carry it as a notice. However the wait ends."""
+    @functools.wraps(wait)
+    def run(*args, **kwargs):
+        try:
+            return wait(*args, **kwargs)
+        finally:
+            notices.mark_read()
+    return run
 
 
 @contextmanager
@@ -283,6 +298,7 @@ def check_esc_pressed() -> bool:
             return False
 
 
+@_marks_read
 def input_with_esc(prompt: str = "") -> str:
     """
     Read a line of input, but allow ESC to cancel.
@@ -357,6 +373,7 @@ def input_with_esc(prompt: str = "") -> str:
                 i += 1
 
 
+@_marks_read
 def wait_for_key(prompt: str = "Press Enter to continue...", allow_esc: bool = True) -> bool:
     """
     Wait for a key press.
@@ -387,6 +404,7 @@ def wait_for_key(prompt: str = "Press Enter to continue...", allow_esc: bool = T
         # Ignore other keys
 
 
+@_marks_read
 def menu_input(prompt: str = "") -> str:
     """
     Read menu input (single character or short string).
@@ -468,6 +486,7 @@ def flush_input():
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
+@_marks_read
 def wait_with_skip(seconds: float = 2.0, message: str = ""):
     """
     Wait for specified seconds, but any keypress skips immediately.

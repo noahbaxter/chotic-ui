@@ -21,6 +21,8 @@ from .header import (
     header_text,
     header_height,
     invalidate_header_cache,
+    notice_text,
+    notice_rows,
 )
 from .formatting import (
     strip_ansi,
@@ -44,6 +46,8 @@ __all__ = [
     "header_text",
     "header_height",
     "invalidate_header_cache",
+    "notice_text",
+    "notice_rows",
     # Formatting
     "strip_ansi",
     "calc_percent",

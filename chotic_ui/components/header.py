@@ -7,7 +7,7 @@ configured, `print_header()` is a no-op.
 """
 
 from ..primitives import Colors, rgb, get_gradient_color
-from ..primitives import terminal
+from ..primitives import notices, terminal
 from ..primitives.colors import get_theme_name, THEME_SWITCHER_ENABLED
 
 
@@ -67,8 +67,26 @@ def _art_fits() -> bool:
 
 
 def print_header() -> None:
-    """Print the configured ASCII header with a diagonal gradient and version."""
-    print(header_text(), end="")
+    """Print the configured ASCII header with a diagonal gradient and version,
+    and under it anything printed since the last screen that nobody has read.
+    For a screen drawn once; one that repaints takes the notices when it opens
+    and passes them to notice_text() on every frame."""
+    print(header_text() + notice_text(notices.take()), end="")
+
+
+def notice_text(lines) -> str:
+    """Unread printed lines as rows under the banner: notice_rows(lines) rows."""
+    if not lines:
+        return ""
+    width = terminal.get_terminal_width()
+    rows = [f"  {terminal.truncate_ansi(line, width - 3)}{Colors.RESET}{ERASE_EOL}"
+            for line in lines]
+    return "\n".join(rows) + f"\n{ERASE_EOL}\n"
+
+
+def notice_rows(lines) -> int:
+    """Rows notice_text(lines) takes, for a screen sizing itself under it."""
+    return len(lines) + 1 if lines else 0
 
 
 def header_text() -> str:
