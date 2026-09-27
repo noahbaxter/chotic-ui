@@ -44,6 +44,42 @@ def enable_windows_vt() -> bool:
         return False
 
 
+def disable_quick_edit() -> bool:
+    """Turn off QuickEdit on the Windows console for as long as the app runs.
+
+    With QuickEdit on, one click in the window starts a text selection
+    ("Select" in the title bar) and Windows blocks every write to the console
+    until it ends. A live screen writes constantly, so the app looks hung
+    with nothing wrong in it. The console's own mode is put back at exit, so a
+    cmd window the app was started from keeps its selection afterwards.
+
+    Returns True if QuickEdit is off after the call, else False.
+    """
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.windll.kernel32
+        ENABLE_QUICK_EDIT_MODE = 0x0040
+        ENABLE_EXTENDED_FLAGS = 0x0080  # required for the QuickEdit bit to apply
+        STD_INPUT_HANDLE = -10
+
+        handle = kernel32.GetStdHandle(STD_INPUT_HANDLE)
+        mode = wintypes.DWORD()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        original = mode.value
+        new_mode = (original | ENABLE_EXTENDED_FLAGS) & ~ENABLE_QUICK_EDIT_MODE
+        if not kernel32.SetConsoleMode(handle, new_mode):
+            return False
+        atexit.register(kernel32.SetConsoleMode, handle, original)
+        return True
+    except Exception:
+        return False
+
+
 def set_window_title(title: str) -> None:
     """Set the terminal/host window title via OSC 2. Honored by every modern
     terminal and by the bundled WezTerm host, identically across OSes. Uses the
@@ -57,6 +93,7 @@ def bootstrap(title: str | None = None) -> None:
     processing and, if given, sets the host window title. Safe to call on every
     platform and in headless/redirected contexts."""
     enable_windows_vt()
+    disable_quick_edit()
     if title and sys.stdout.isatty():
         set_window_title(title)
 
