@@ -172,6 +172,15 @@ class TestWrapping:
         assert s.lines()[:2] == ["> abcdefg", ""]
         assert (s.r, s.c) == (0, 9)
 
+    def test_a_width_change_starts_the_redraw_from_the_reflowed_row(self):
+        """The terminal re-wraps the line when the window resizes; the cursor
+        row from the old width would start the redraw in the wrong place."""
+        e = LineEditor("> ")
+        e.feed("abcdefghijklmnopqrstuvwxyz")  # 28 columns
+        e.render(10)  # cursor on row 2 at 10 wide
+        out = e.render(5)  # re-wrapped: 28 // 5 = row 5
+        assert out.startswith("\x1b[5A")
+
     def test_a_pasted_url_longer_than_three_rows(self, monkeypatch):
         url = "https://drive.google.com/drive/folders/" + "A" * 40
         monkeypatch.setattr(le.clipboard, "read_text", lambda: url)

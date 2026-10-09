@@ -73,6 +73,7 @@ class LineEditor:
         self.done = False
         self.cancelled = False
         self._row = 0  # rows the cursor sits below the prompt's first row
+        self._cols = None  # the width that row was worked out for
 
     def feed(self, keys) -> None:
         for key in keys:
@@ -116,6 +117,11 @@ class LineEditor:
         the cursor on `pos`."""
         cols = max(cols, 1)
         start = visible_len(self.prompt)
+        if self._cols not in (None, cols):
+            # The window changed width and the terminal re-wrapped the line, so
+            # the row the cursor was left on is where `pos` falls at the new width.
+            self._row = (start + self.pos) // cols
+        self._cols = cols
         out = []
         if self._row:
             out.append(f"\x1b[{self._row}A")
