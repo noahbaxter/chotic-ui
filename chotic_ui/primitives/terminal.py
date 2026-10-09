@@ -6,6 +6,7 @@ Handles terminal size, clearing, and progress display.
 
 import os
 import re
+import unicodedata
 
 ANSI_PATTERN = re.compile(r'\x1b\[[0-9;]*m')
 
@@ -58,23 +59,47 @@ def get_terminal_width() -> int:
         return 80
 
 
+def char_width(ch: str) -> int:
+    """Terminal columns one character takes: 2 for CJK and other wide glyphs,
+    0 for combining marks and joiners, else 1. Counting a wide glyph as one
+    makes a line longer than it looks, so it wraps and the frame shifts."""
+    if unicodedata.combining(ch) or unicodedata.category(ch) in ("Mn", "Me", "Cf"):
+        return 0
+    return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+
+
+def display_width(text: str) -> int:
+    """Columns plain text (no ANSI) takes on screen."""
+    return sum(char_width(ch) for ch in text)
+
+
+def _cut(text: str, columns: int) -> str:
+    """The longest prefix of plain text within `columns`."""
+    used = 0
+    for i, ch in enumerate(text):
+        used += char_width(ch)
+        if used > columns:
+            return text[:i]
+    return text
+
+
 def truncate_text(text: str, max_len: int, suffix: str = "...") -> str:
-    """Truncate text to max_len, adding suffix if truncated. Returns plain text (no ANSI)."""
+    """Truncate text to max_len columns, adding suffix if truncated. Returns plain text (no ANSI)."""
     text = strip_ansi(text)  # Strip first - colors should be added after truncation, not before
-    if len(text) <= max_len:
+    if display_width(text) <= max_len:
         return text
     if max_len <= len(suffix):
-        return text[:max_len]
-    return text[:max_len - len(suffix)] + suffix
+        return _cut(text, max_len)
+    return _cut(text, max_len - len(suffix)) + suffix
 
 
 def visible_len(text: str) -> int:
-    """Printable width of text, ignoring ANSI color codes."""
-    return len(strip_ansi(text))
+    """Printable width of text in columns, ignoring ANSI color codes."""
+    return display_width(strip_ansi(text))
 
 
 def truncate_ansi(text: str, max_visible: int) -> str:
-    """Truncate to max_visible printable chars, preserving ANSI codes,
+    """Truncate to max_visible columns, preserving ANSI codes,
     appending an ellipsis when truncated."""
     if visible_len(text) <= max_visible:
         return text
@@ -90,13 +115,19 @@ def truncate_ansi(text: str, max_visible: int) -> str:
             out.append(text[i:j + 1])
             i = j + 1
             continue
-        if visible >= target:
+        width = char_width(text[i])
+        if visible + width > target:
             out.append("…")
             break
         out.append(text[i])
-        visible += 1
+        visible += width
         i += 1
     return "".join(out)
+
+
+def pad_right(text: str, width: int) -> str:
+    """Right-pad to `width` columns (no truncating), counting wide glyphs as two."""
+    return text + " " * max(0, width - visible_len(text))
 
 
 def pad_to(text: str, width: int) -> str:
