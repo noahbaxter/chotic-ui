@@ -26,7 +26,7 @@ from ..primitives import (
     Colors, getch, getch_with_timeout, cbreak_noecho,
     KEY_UP, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_TAB, KEY_BACKSPACE, KEY_SPACE,
 )
-from ..primitives.terminal import strip_ansi, visible_len, pad_to, truncate_ansi
+from ..primitives.terminal import strip_ansi, visible_len, pad_to, truncate_ansi, fit_to_window
 from ..primitives import notices
 from ..components import (
     header_text, header_height, notice_text, notice_rows, box_row,
@@ -396,12 +396,11 @@ class TwoPane:
         # erase-to-end-of-line, and the trailing erase clears anything left over.
         out.write("\033[H\033[J" if not self._painted else "\033[H")
         self._painted = True
-        out.write(header_text() + notice_text(self._notices))
-        # The box has a minimum width, and a line that wraps adds a row the
-        # height maths never counted, so a window narrower than the box would
-        # scroll on every repaint. Clip instead: the right edge goes, nothing moves.
-        rows = [truncate_ansi(line, term[0]) for line in "\n".join(lines).split("\n")]
-        out.write("\033[K\n".join(rows) + "\033[J\033[3J")
+        # The box has a minimum width and the frame a minimum height, and
+        # either overflowing scrolls on every repaint. Clip instead: the edges
+        # go, nothing moves.
+        frame = header_text() + notice_text(self._notices) + "\n".join(lines)
+        out.write(fit_to_window(frame, term[0], term[1]) + "\033[J\033[3J")
         out.flush()
 
     def render_once(self):

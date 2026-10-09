@@ -125,6 +125,15 @@ def truncate_ansi(text: str, max_visible: int) -> str:
     return "".join(out)
 
 
+def fit_to_window(text: str, cols: int, rows: int) -> str:
+    """A full-screen frame cut to the window: no row wider than `cols` and no
+    more than `rows` of them, each ended with erase-to-end-of-line. A row that
+    wraps, or a frame taller than the window, scrolls on every repaint, so a
+    small window loses the edges instead."""
+    lines = text.split("\n")[:max(rows, 1)]
+    return "\033[K\n".join(truncate_ansi(line, cols) for line in lines)
+
+
 def pad_right(text: str, width: int) -> str:
     """Right-pad to `width` columns (no truncating), counting wide glyphs as two."""
     return text + " " * max(0, width - visible_len(text))

@@ -14,7 +14,7 @@ from ..primitives import (
     Colors, getch, cbreak_noecho,
     KEY_UP, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_BACKSPACE, KEY_SPACE,
 )
-from ..primitives.terminal import strip_ansi, get_terminal_width, visible_len, truncate_ansi
+from ..primitives.terminal import strip_ansi, get_terminal_width, visible_len, truncate_ansi, fit_to_window
 from ..primitives import notices
 from ..components import (
     header_text, notice_text, notice_rows, box_row,
@@ -128,9 +128,9 @@ class FilterList:
         out = sys.__stdout__ if sys.__stdout__ else sys.stdout
         # header rendered separately (it manages its own caching/print)
         out.write("\033[H\033[J")
-        out.write(header_text() + notice_text(self._notices))
-        content = "\n".join(lines).replace("\n", "\033[K\n")
-        out.write(content + "\033[J\033[3J")
+        size = shutil.get_terminal_size((80, 24))
+        frame = header_text() + notice_text(self._notices) + "\n".join(lines)
+        out.write(fit_to_window(frame, size.columns, size.lines) + "\033[J\033[3J")
         out.flush()
 
     def _clamp_scroll(self, matches):
