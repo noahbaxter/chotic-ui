@@ -8,9 +8,10 @@ import sys
 import os
 import time
 import functools
+import shutil
 from contextlib import contextmanager
 
-from . import notices
+from . import line_editor, notices
 
 # Platform-specific imports
 if os.name == 'nt':
@@ -317,60 +318,57 @@ def input_with_esc(prompt: str = "") -> str:
     Raises:
         CancelInput: If ESC is pressed
     """
-    if prompt:
-        print(prompt, end='', flush=True)
+    editor = line_editor.LineEditor(prompt)
 
-    result = []
+    def draw():
+        cols = shutil.get_terminal_size((80, 24)).columns
+        sys.stdout.write(editor.render(cols))
+        sys.stdout.flush()
+
+    def finish():
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+        if editor.cancelled:
+            raise CancelInput()
+        return editor.text
+
+    draw()
 
     if os.name == 'nt':
-        # Windows: msvcrt has no mode-toggle race; the per-char loop is fine.
+        # Windows: msvcrt has no mode-toggle race. Keys that are already
+        # waiting (a paste) are taken together so the line is drawn once.
         while True:
-            ch = getch()
-            if not ch:
-                continue
-            elif ch == '\x1b':
-                print()
-                raise CancelInput()
-            elif ch in ('\r', '\n'):
-                print()
-                return ''.join(result)
-            elif ch in ('\x7f', '\x08'):
-                if result:
-                    result.pop()
-                    print('\b \b', end='', flush=True)
-            elif ch >= ' ':
-                result.append(ch)
-                print(ch, end='', flush=True)
+            editor.feed([_read_windows_key()])
+            while not editor.done and msvcrt.kbhit():
+                editor.feed([_read_windows_key()])
+            draw()
+            if editor.done:
+                return finish()
 
     with cbreak_noecho() as fd:
         while True:
             select.select([sys.stdin], [], [], None)
             chunk = os.read(fd, 4096).decode('utf-8', errors='replace')
-            i = 0
-            while i < len(chunk):
-                ch = chunk[i]
-                if ch == '\x1b':
-                    if len(chunk) == 1:  # standalone ESC pressed
-                        print()
-                        raise CancelInput()
-                    # Escape sequence (arrow key etc.): skip through its
-                    # terminator (a letter or ~) and ignore it.
-                    i += 1
-                    while i < len(chunk) and not (chunk[i].isalpha() or chunk[i] == '~'):
-                        i += 1
-                    i += 1
-                    continue
-                elif ch in ('\r', '\n'):
-                    print()
-                    return ''.join(result)
-                elif ch in ('\x7f', '\x08'):
-                    if result:
-                        result.pop()
-                        print('\b \b', end='', flush=True)
-                elif ch >= ' ':
-                    result.append(ch)
-                    print(ch, end='', flush=True)
-                i += 1
+            editor.feed(line_editor.parse_chunk(chunk))
+            draw()
+            if editor.done:
+                return finish()
+
+
+def _read_windows_key() -> str:
+    """One key from the Windows console as a character or a line_editor name."""
+    ch = msvcrt.getwch()
+    if ch in ('\xe0', '\x00'):  # arrows and the like come as a prefix + code
+        return {'K': line_editor.LEFT, 'M': line_editor.RIGHT,
+                'G': line_editor.HOME, 'O': line_editor.END,
+                'S': line_editor.DELETE}.get(msvcrt.getwch(), '')
+    if ch == '\x1b':
+        if msvcrt.kbhit():  # an escape sequence, not the Esc key
+            while msvcrt.kbhit():
+                msvcrt.getwch()
+            return ''
+        return line_editor.ESC
+    return ch
 
 
 @_marks_read
