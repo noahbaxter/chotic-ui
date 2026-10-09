@@ -153,7 +153,7 @@ def test_a_menu_shows_what_was_printed_before_it(monkeypatch):
     # Arrow down first: the notice has to survive a repaint, not just the
     # first frame.
     keys = iter([KEY_DOWN, KEY_ESC])
-    monkeypatch.setattr(menu_module, "getch", lambda *a, **k: next(keys))
+    monkeypatch.setattr(menu_module, "getch_with_timeout", lambda *a, **k: next(keys))
     monkeypatch.setattr(Menu, "_drain_arrow_keys", lambda self: 0)
 
     notices.record("Not enough disk space\nNeeds 40 GB, you have 18 GB.\n")

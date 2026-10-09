@@ -6,9 +6,27 @@ Handles terminal size, clearing, and progress display.
 
 import os
 import re
+import shutil
 import unicodedata
 
 ANSI_PATTERN = re.compile(r'\x1b\[[0-9;]*m')
+
+# Cursor and erase sequences, named so a frame reads as what it does.
+CURSOR_HOME = "\033[H"
+CLEAR_SCREEN = "\033[2J"
+ERASE_EOL = "\033[K"        # from the cursor to the end of the line
+ERASE_BELOW = "\033[J"      # from the cursor to the end of the screen
+CLEAR_SCROLLBACK = "\033[3J"
+CLEAR_SCREEN_HOME = CLEAR_SCREEN + CURSOR_HOME
+
+
+def cursor_up(rows: int) -> str:
+    return f"\033[{rows}A"
+
+
+def cursor_column(col: int) -> str:
+    """Move to a column on the current row, counting from 1."""
+    return f"\033[{col}G"
 
 
 def strip_ansi(text: str) -> str:
@@ -125,13 +143,27 @@ def truncate_ansi(text: str, max_visible: int) -> str:
     return "".join(out)
 
 
+_seen_size = None
+
+
+def size_changed() -> bool:
+    """True when the window is a different size than at the last call. The
+    first call only records it. Polled, because Windows has no SIGWINCH and a
+    screen waiting on a key would otherwise sit on a stale, re-wrapped frame."""
+    global _seen_size
+    size = shutil.get_terminal_size((80, 24))
+    changed = _seen_size is not None and size != _seen_size
+    _seen_size = size
+    return changed
+
+
 def fit_to_window(text: str, cols: int, rows: int) -> str:
     """A full-screen frame cut to the window: no row wider than `cols` and no
     more than `rows` of them, each ended with erase-to-end-of-line. A row that
     wraps, or a frame taller than the window, scrolls on every repaint, so a
     small window loses the edges instead."""
     lines = text.split("\n")[:max(rows, 1)]
-    return "\033[K\n".join(truncate_ansi(line, cols) for line in lines)
+    return (ERASE_EOL + "\n").join(truncate_ansi(line, cols) for line in lines)
 
 
 def pad_right(text: str, width: int) -> str:

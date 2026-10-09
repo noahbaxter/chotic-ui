@@ -27,6 +27,7 @@ from ..primitives import (
     KEY_UP, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_TAB, KEY_BACKSPACE, KEY_SPACE,
 )
 from ..primitives.terminal import strip_ansi, visible_len, pad_to, truncate_ansi, fit_to_window
+from ..primitives.terminal import CURSOR_HOME, ERASE_BELOW, CLEAR_SCROLLBACK
 from ..primitives import notices
 from ..components import (
     header_text, header_height, notice_text, notice_rows, box_row,
@@ -394,13 +395,13 @@ class TwoPane:
         # blanks it for one frame, which reads as a flicker on every repaint --
         # and a live screen repaints a lot. Each line below carries its own
         # erase-to-end-of-line, and the trailing erase clears anything left over.
-        out.write("\033[H\033[J" if not self._painted else "\033[H")
+        out.write(CURSOR_HOME if self._painted else CURSOR_HOME + ERASE_BELOW)
         self._painted = True
         # The box has a minimum width and the frame a minimum height, and
         # either overflowing scrolls on every repaint. Clip instead: the edges
         # go, nothing moves.
         frame = header_text() + notice_text(self._notices) + "\n".join(lines)
-        out.write(fit_to_window(frame, term[0], term[1]) + "\033[J\033[3J")
+        out.write(fit_to_window(frame, term[0], term[1]) + ERASE_BELOW + CLEAR_SCROLLBACK)
         out.flush()
 
     def render_once(self):

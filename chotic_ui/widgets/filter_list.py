@@ -11,13 +11,16 @@ import sys
 import shutil
 
 from ..primitives import (
-    Colors, getch, cbreak_noecho,
+    Colors, getch_with_timeout, cbreak_noecho,
     KEY_UP, KEY_DOWN, KEY_ENTER, KEY_ESC, KEY_BACKSPACE, KEY_SPACE,
 )
-from ..primitives.terminal import strip_ansi, get_terminal_width, visible_len, truncate_ansi, fit_to_window
+from ..primitives.terminal import (
+    strip_ansi, get_terminal_width, visible_len, truncate_ansi, fit_to_window, size_changed,
+    CURSOR_HOME, ERASE_BELOW, CLEAR_SCROLLBACK,
+)
 from ..primitives import notices
 from ..components import (
-    header_text, notice_text, notice_rows, box_row,
+    invalidate_header_cache, header_text, notice_text, notice_rows, box_row,
     BOX_TL, BOX_TR, BOX_BL, BOX_BR, BOX_H, BOX_V, BOX_TL_DIV, BOX_TR_DIV,
 )
 
@@ -127,10 +130,10 @@ class FilterList:
 
         out = sys.__stdout__ if sys.__stdout__ else sys.stdout
         # header rendered separately (it manages its own caching/print)
-        out.write("\033[H\033[J")
+        out.write(CURSOR_HOME + ERASE_BELOW)
         size = shutil.get_terminal_size((80, 24))
         frame = header_text() + notice_text(self._notices) + "\n".join(lines)
-        out.write(fit_to_window(frame, size.columns, size.lines) + "\033[J\033[3J")
+        out.write(fit_to_window(frame, size.columns, size.lines) + ERASE_BELOW + CLEAR_SCROLLBACK)
         out.flush()
 
     def _clamp_scroll(self, matches):
@@ -153,9 +156,18 @@ class FilterList:
                 elif self._cursor not in sel:
                     self._cursor = min(sel, key=lambda i: abs(i - self._cursor))
                 self._clamp_scroll(matches)
+                size_changed()
                 self._render(matches)
 
-                key = getch(return_special_keys=True)
+                # Polled so a resize repaints without waiting for a key.
+                key = None
+                while key is None:
+                    key = getch_with_timeout(250, return_special_keys=True)
+                    if key is None and size_changed():
+                        invalidate_header_cache()
+                        break
+                if key is None:
+                    continue
                 if key == KEY_ESC:
                     return None
                 if key == KEY_ENTER:

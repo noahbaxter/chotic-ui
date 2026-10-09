@@ -11,7 +11,7 @@ from ..primitives import notices, terminal
 from ..primitives.colors import get_theme_name, THEME_SWITCHER_ENABLED
 
 
-ERASE_EOL = "\033[K"
+from ..primitives.terminal import ERASE_EOL
 
 _ascii_art = ""
 _version = ""

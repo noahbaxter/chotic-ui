@@ -8,7 +8,7 @@ to test.
 """
 
 from . import clipboard
-from .terminal import visible_len
+from .terminal import ERASE_BELOW, cursor_column, cursor_up, visible_len
 
 LEFT = "LEFT"
 RIGHT = "RIGHT"
@@ -124,8 +124,8 @@ class LineEditor:
         self._cols = cols
         out = []
         if self._row:
-            out.append(f"\x1b[{self._row}A")
-        out.append("\r\x1b[J" + self.prompt + self.text)
+            out.append(cursor_up(self._row))
+        out.append("\r" + ERASE_BELOW + self.prompt + self.text)
         total = start + len(self.text)
         if total and total % cols == 0:
             # Text that ends exactly on the last column leaves the cursor
@@ -134,7 +134,7 @@ class LineEditor:
         end_row = total // cols
         row, col = divmod(start + self.pos, cols)
         if end_row > row:
-            out.append(f"\x1b[{end_row - row}A")
-        out.append(f"\x1b[{col + 1}G")
+            out.append(cursor_up(end_row - row))
+        out.append(cursor_column(col + 1))
         self._row = row
         return "".join(out)

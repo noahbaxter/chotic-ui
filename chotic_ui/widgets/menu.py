@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..primitives import (
-    getch,
     getch_with_timeout,
     cbreak_noecho,
     Colors,
@@ -35,7 +34,10 @@ from ..primitives import (
 import re as _re
 
 from ..primitives import notices
-from ..primitives.terminal import truncate_ansi, fit_to_window
+from ..primitives.terminal import (
+    truncate_ansi, fit_to_window, size_changed,
+    CURSOR_HOME, ERASE_BELOW, CLEAR_SCROLLBACK,
+)
 
 # A colour code through to its reset. Kept whole when wrapping: a phrase that
 # is coloured because it is the warning reads worst half in and half out of it.
@@ -116,12 +118,14 @@ if hasattr(signal, 'SIGWINCH'):
 
 
 def check_resize() -> bool:
-    """Check and clear the resize flag. Returns True if resize occurred."""
+    """Check and clear the resize flag. Returns True if resize occurred.
+    The size is compared too, since Windows never raises the signal."""
     global _resize_flag
-    if _resize_flag:
-        _resize_flag = False
-        return True
-    return False
+    resized, _resize_flag = _resize_flag, False
+    if size_changed():
+        invalidate_header_cache()  # the signal handler does this on Unix
+        resized = True
+    return resized
 
 
 @dataclass
@@ -690,7 +694,7 @@ class Menu:
         out = sys.__stdout__ if sys.__stdout__ else sys.stdout
         size = shutil.get_terminal_size()
         content = fit_to_window(buf.getvalue(), size.columns, size.lines)
-        out.write(f"\033[H{content}\033[J\033[3J")
+        out.write(CURSOR_HOME + content + ERASE_BELOW + CLEAR_SCROLLBACK)
         out.flush()
 
     def update_status_line_in_place(self, new_status: str):
@@ -752,9 +756,6 @@ class Menu:
         hotkeys = {item.hotkey.upper(): i for i, item in enumerate(self.items)
                    if isinstance(item, (MenuItem, MenuAction)) and item.hotkey}
 
-        # Use timeout-based input if we have an update callback
-        use_timeout = self.update_callback is not None
-
         with cbreak_noecho():
             check_resize()
             self._last_callback_time = time.monotonic()
@@ -765,35 +766,31 @@ class Menu:
                     self._render()
                     continue
 
-                # Get input (with timeout if we have update callback)
-                if use_timeout:
-                    key = getch_with_timeout(self.refresh_interval_ms, return_special_keys=True)
-                    if key is None:
-                        # Timeout - check for updates
-                        if self.update_callback:
-                            self._last_callback_time = time.monotonic()
-                            result = self.update_callback(self)
-                            if result == "rebuild":
-                                return MenuResult(self.items[self._selected], "rebuild")
-                            elif result:
-                                self._render()
-                        continue
-                else:
-                    key = getch(return_special_keys=True)
+                # Always waits with a timeout: that is what notices a resize on
+                # Windows, and what runs the update callback when there is one.
+                key = getch_with_timeout(self.refresh_interval_ms, return_special_keys=True)
+                if key is None:
+                    if self.update_callback:
+                        self._last_callback_time = time.monotonic()
+                        result = self.update_callback(self)
+                        if result == "rebuild":
+                            return MenuResult(self.items[self._selected], "rebuild")
+                        elif result:
+                            self._render()
+                    continue
 
                 if check_resize():
                     self._render()
                     continue
 
                 # Periodic callback during rapid input
-                if use_timeout:
-                    now = time.monotonic()
-                    if now - self._last_callback_time >= self.refresh_interval_ms / 1000.0:
-                        self._last_callback_time = now
-                        if self.update_callback:
-                            result = self.update_callback(self)
-                            if result == "rebuild":
-                                return MenuResult(self.items[self._selected], "rebuild")
+                now = time.monotonic()
+                if now - self._last_callback_time >= self.refresh_interval_ms / 1000.0:
+                    self._last_callback_time = now
+                    if self.update_callback:
+                        result = self.update_callback(self)
+                        if result == "rebuild":
+                            return MenuResult(self.items[self._selected], "rebuild")
 
                 # An editable row swallows typing, so Space is a space and B
                 # is the letter B rather than a hotkey. Navigation, Enter and
